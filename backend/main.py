@@ -24,9 +24,54 @@ app.add_middleware(
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# カスタム音声・アバター設定
+DEFAULT_VOICE_NAME = os.getenv("DEFAULT_VOICE_NAME", "ja-JP-NanamiNeural")
+DEFAULT_VOICE_LANGUAGE = os.getenv("DEFAULT_VOICE_LANGUAGE", "ja-JP")
+DEFAULT_AVATAR_CHARACTER = os.getenv("DEFAULT_AVATAR_CHARACTER", "lisa")
+DEFAULT_AVATAR_STYLE = os.getenv("DEFAULT_AVATAR_STYLE", "casual-sitting")
+DEFAULT_VIDEO_FORMAT = os.getenv("DEFAULT_VIDEO_FORMAT", "mp4")
+
+# カスタム設定
+CUSTOM_AVATAR_ENABLED = os.getenv("CUSTOM_AVATAR_ENABLED", "false").lower() == "true"
+CUSTOM_AVATAR_CHARACTER = os.getenv("CUSTOM_AVATAR_CHARACTER", "")
+CUSTOM_AVATAR_STYLE = os.getenv("CUSTOM_AVATAR_STYLE", "")
+CUSTOM_VOICE_ENABLED = os.getenv("CUSTOM_VOICE_ENABLED", "false").lower() == "true"
+CUSTOM_VOICE_NAME = os.getenv("CUSTOM_VOICE_NAME", "")
+CUSTOM_VOICE_DEPLOYMENT_ID = os.getenv("CUSTOM_VOICE_DEPLOYMENT_ID", "")
+
 @app.get("/")
 async def root():
     return {"message": "リアルタイムアバターAPI が正常に動作しています"}
+
+@app.get("/api/config")
+async def get_config():
+    """アプリケーション設定を取得"""
+    try:
+        return {
+            "voice": {
+                "defaultName": DEFAULT_VOICE_NAME,
+                "defaultLanguage": DEFAULT_VOICE_LANGUAGE
+            },
+            "avatar": {
+                "defaultCharacter": DEFAULT_AVATAR_CHARACTER,
+                "defaultStyle": DEFAULT_AVATAR_STYLE,
+                "defaultVideoFormat": DEFAULT_VIDEO_FORMAT
+            },
+            "customVoice": {
+                "enabled": CUSTOM_VOICE_ENABLED,
+                "name": CUSTOM_VOICE_NAME,
+                "deploymentId": CUSTOM_VOICE_DEPLOYMENT_ID
+            },
+            "customAvatar": {
+                "enabled": CUSTOM_AVATAR_ENABLED,
+                "character": CUSTOM_AVATAR_CHARACTER,
+                "style": CUSTOM_AVATAR_STYLE
+            },
+            "region": os.getenv("SPEECH_REGION")
+        }
+    except Exception as e:
+        logger.error(f"設定取得エラー: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"設定取得エラー: {str(e)}")
 
 @app.get("/api/get-speech-token")
 async def get_speech_token():

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as speechSdk from 'microsoft-cognitiveservices-speech-sdk';
-import { getTokenOrRefresh, getAvatarICEServerInfo } from '../utils/speechUtils';
-import { AvatarPlayerProps } from '../types';
+import { getTokenOrRefresh, getAvatarICEServerInfo, getAppConfig } from '../utils/speechUtils';
+import { AvatarPlayerProps, AvatarSettings } from '../types';
 
 const AvatarPlayer: React.FC<AvatarPlayerProps> = ({ 
   isConnected, 
@@ -14,6 +14,17 @@ const AvatarPlayer: React.FC<AvatarPlayerProps> = ({
     const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
     const [debugInfo, setDebugInfo] = useState<string[]>([]);
     const [connectionRetries, setConnectionRetries] = useState<number>(0);
+    const [avatarSettings, setAvatarSettings] = useState<AvatarSettings>({
+        voiceName: 'ja-JP-NanamiNeural',
+        voiceLanguage: 'ja-JP',
+        avatarCharacter: 'lisa',
+        avatarStyle: 'casual-sitting',
+        videoFormat: 'mp4',
+        region: 'eastus',
+        customVoiceEnabled: false,
+        customVoiceDeploymentId: '',
+        customAvatarEnabled: false
+    });
     
     // refs with proper typing
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -31,6 +42,30 @@ const AvatarPlayer: React.FC<AvatarPlayerProps> = ({
     };
 
     useEffect(() => {
+        // アプリケーション設定を読み込み
+        const loadConfig = async () => {
+            try {
+                const config = await getAppConfig();
+                setAvatarSettings({
+                    voiceName: config.customVoice?.enabled ? config.customVoice.name : config.voice.defaultName,
+                    voiceLanguage: config.voice.defaultLanguage,
+                    avatarCharacter: config.customAvatar?.enabled ? config.customAvatar.character : config.avatar.defaultCharacter,
+                    avatarStyle: config.customAvatar?.enabled ? config.customAvatar.style : config.avatar.defaultStyle,
+                    videoFormat: config.avatar.defaultVideoFormat,
+                    region: config.region,
+                    customVoiceEnabled: config.customVoice?.enabled || false,
+                    customVoiceDeploymentId: config.customVoice?.deploymentId || '',
+                    customAvatarEnabled: config.customAvatar?.enabled || false
+                });
+                addDebugInfo(`設定読み込み完了: voice=${config.customVoice?.enabled ? config.customVoice.name : config.voice.defaultName}, avatar=${config.customAvatar?.enabled ? config.customAvatar.character : config.avatar.defaultCharacter}`);
+            } catch (error) {
+                console.error('設定読み込み失敗:', error);
+                addDebugInfo(`設定読み込み失敗: ${error}`);
+            }
+        };
+        
+        loadConfig();
+        
         // コンポーネントのアンマウント時にクリーンアップ
         return () => {
             addDebugInfo("コンポーネントクリーンアップ開始");
@@ -83,8 +118,8 @@ const AvatarPlayer: React.FC<AvatarPlayerProps> = ({
         
         // Speech Configを作成
         const speechConfig = speechSdk.SpeechConfig.fromAuthorizationToken(authToken, region);
-        speechConfig.speechSynthesisLanguage = "ja-JP";
-        speechConfig.speechSynthesisVoiceName = "ja-JP-NanamiNeural";
+        speechConfig.speechSynthesisLanguage = avatarSettings.voiceLanguage;
+        speechConfig.speechSynthesisVoiceName = avatarSettings.voiceName;
         speechConfigRef.current = speechConfig;
         addDebugInfo(`Speech Config作成完了: lang=${speechConfig.speechSynthesisLanguage}, voice=${speechConfig.speechSynthesisVoiceName}`);
 
@@ -92,11 +127,17 @@ const AvatarPlayer: React.FC<AvatarPlayerProps> = ({
         
         // アバター設定を作成
         const avatarConfig = new speechSdk.AvatarConfig(
-            "lisa", // アバターキャラクター
-            "casual-sitting", // アバタースタイル
-            "mp4" as any // ビデオフォーマット（型定義の問題を回避）
+            avatarSettings.avatarCharacter, // アバターキャラクター
+            avatarSettings.avatarStyle, // アバタースタイル
+            avatarSettings.videoFormat as any // ビデオフォーマット（型定義の問題を回避）
         );
-        addDebugInfo("アバター設定作成完了: character=lisa, style=casual-sitting");
+        
+        // カスタムアバターの場合はcustomizedをtrueに設定
+        if (avatarSettings.customAvatarEnabled) {
+            (avatarConfig as any).customized = true;
+        }
+        
+        addDebugInfo(`アバター設定作成完了: character=${avatarSettings.avatarCharacter}, style=${avatarSettings.avatarStyle}, customized=${avatarSettings.customAvatarEnabled}`);
 
         setStatus('ICEサーバー情報取得中...');
         
@@ -333,6 +374,14 @@ const AvatarPlayer: React.FC<AvatarPlayerProps> = ({
         
         // アバターシンセサイザーを作成
         const avatarSynthesizer = new speechSdk.AvatarSynthesizer(speechConfig, avatarConfig);
+        
+        // カスタムボイスの設定
+        if (avatarSettings.customVoiceEnabled && avatarSettings.customVoiceDeploymentId) {
+            // Note: カスタムボイスは通常はBatch APIで使用されます
+            // リアルタイムSDKでは限定的なサポートのため、コメントで残しておきます
+            addDebugInfo(`カスタムボイス設定: ${avatarSettings.voiceName} (ID: ${avatarSettings.customVoiceDeploymentId})`);
+        }
+        
         avatarSynthesizerRef.current = avatarSynthesizer;
         addDebugInfo("AvatarSynthesizer作成完了");
 
@@ -364,7 +413,6 @@ const AvatarPlayer: React.FC<AvatarPlayerProps> = ({
             addDebugInfo(`トークン取得成功: region=${region}`);
 
             await initializeAvatarInternal(authToken, region);
-            
         } catch (error) {
             console.error('アバター初期化エラー:', error);
             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -395,8 +443,8 @@ const AvatarPlayer: React.FC<AvatarPlayerProps> = ({
             
             // SSML形式で音声合成を実行
             const ssml = `
-            <speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='ja-JP'>
-                <voice name='ja-JP-NanamiNeural'>
+            <speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='${avatarSettings.voiceLanguage}'>
+                <voice name='${avatarSettings.voiceName}'>
                     ${message}
                 </voice>
             </speak>`;
@@ -457,6 +505,133 @@ const AvatarPlayer: React.FC<AvatarPlayerProps> = ({
 
     return (
         <div className="avatar-player-container">
+            
+            {/* Settings Panel */}
+            <div className="settings-panel" style={{
+                backgroundColor: '#f5f5f5',
+                padding: '20px',
+                marginBottom: '20px',
+                borderRadius: '8px',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+                gap: '15px'
+            }}>
+                <h3 style={{gridColumn: '1 / -1', margin: '0 0 15px 0'}}>設定</h3>
+                
+                <div>
+                    <label style={{display: 'block', marginBottom: '5px', fontWeight: 'bold'}}>音声名:</label>
+                    <input
+                        type="text"
+                        value={avatarSettings.voiceName}
+                        onChange={(e) => setAvatarSettings(prev => ({...prev, voiceName: e.target.value}))}
+                        placeholder="ja-JP-NanamiNeural"
+                        style={{width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc'}}
+                    />
+                </div>
+                
+                <div>
+                    <label style={{display: 'block', marginBottom: '5px', fontWeight: 'bold'}}>音声言語:</label>
+                    <input
+                        type="text"
+                        value={avatarSettings.voiceLanguage}
+                        onChange={(e) => setAvatarSettings(prev => ({...prev, voiceLanguage: e.target.value}))}
+                        placeholder="ja-JP"
+                        style={{width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc'}}
+                    />
+                </div>
+                
+                <div>
+                    <label style={{display: 'block', marginBottom: '5px', fontWeight: 'bold'}}>アバターキャラクター:</label>
+                    <input
+                        type="text"
+                        value={avatarSettings.avatarCharacter}
+                        onChange={(e) => setAvatarSettings(prev => ({...prev, avatarCharacter: e.target.value}))}
+                        placeholder="lisa"
+                        style={{width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc'}}
+                    />
+                </div>
+                
+                <div>
+                    <label style={{display: 'block', marginBottom: '5px', fontWeight: 'bold'}}>アバタースタイル:</label>
+                    <input
+                        type="text"
+                        value={avatarSettings.avatarStyle}
+                        onChange={(e) => setAvatarSettings(prev => ({...prev, avatarStyle: e.target.value}))}
+                        placeholder="casual-sitting"
+                        style={{width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc'}}
+                    />
+                </div>
+                
+                <div>
+                    <label style={{display: 'block', marginBottom: '5px', fontWeight: 'bold'}}>ビデオフォーマット:</label>
+                    <select
+                        value={avatarSettings.videoFormat}
+                        onChange={(e) => setAvatarSettings(prev => ({...prev, videoFormat: e.target.value}))}
+                        style={{width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc'}}
+                    >
+                        <option value="mp4">MP4</option>
+                        <option value="webm">WebM</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label style={{display: 'block', marginBottom: '5px', fontWeight: 'bold'}}>リージョン:</label>
+                    <input
+                        type="text"
+                        value={avatarSettings.region}
+                        onChange={(e) => setAvatarSettings(prev => ({...prev, region: e.target.value}))}
+                        placeholder="eastus"
+                        style={{width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc'}}
+                    />
+                </div>
+                
+                {/* カスタムボイス設定 */}
+                <div style={{gridColumn: '1 / -1', borderTop: '1px solid #ddd', paddingTop: '15px', marginTop: '10px'}}>
+                    <label style={{display: 'flex', alignItems: 'center', fontWeight: 'bold', marginBottom: '10px'}}>
+                        <input
+                            type="checkbox"
+                            checked={avatarSettings.customVoiceEnabled}
+                            onChange={(e) => setAvatarSettings(prev => ({...prev, customVoiceEnabled: e.target.checked}))}
+                            style={{marginRight: '8px'}}
+                        />
+                        カスタムボイス使用
+                    </label>
+                    {avatarSettings.customVoiceEnabled && (
+                        <div style={{marginLeft: '20px', display: 'grid', gap: '10px'}}>
+                            <div>
+                                <label style={{display: 'block', marginBottom: '5px'}}>Deployment ID:</label>
+                                <input
+                                    type="text"
+                                    value={avatarSettings.customVoiceDeploymentId}
+                                    onChange={(e) => setAvatarSettings(prev => ({...prev, customVoiceDeploymentId: e.target.value}))}
+                                    placeholder="your-custom-voice-deployment-id"
+                                    style={{width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc'}}
+                                />
+                            </div>
+                        </div>
+                    )}
+                </div>
+                
+                {/* カスタムアバター設定 */}
+                <div style={{gridColumn: '1 / -1', borderTop: '1px solid #ddd', paddingTop: '15px', marginTop: '10px'}}>
+                    <label style={{display: 'flex', alignItems: 'center', fontWeight: 'bold', marginBottom: '10px'}}>
+                        <input
+                            type="checkbox"
+                            checked={avatarSettings.customAvatarEnabled}
+                            onChange={(e) => setAvatarSettings(prev => ({...prev, customAvatarEnabled: e.target.checked}))}
+                            style={{marginRight: '8px'}}
+                        />
+                        カスタムアバター使用
+                    </label>
+                    {avatarSettings.customAvatarEnabled && (
+                        <div style={{marginLeft: '20px', color: '#666', fontSize: '14px'}}>
+                            <p>※ カスタムアバターを使用する場合、アバターキャラクターにカスタムアバター名を入力してください</p>
+                            <p>※ 例: "YourCustomAvatarName"</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+
             {/* メイン表示エリア */}
             <div className="avatar-display">
                 <video 

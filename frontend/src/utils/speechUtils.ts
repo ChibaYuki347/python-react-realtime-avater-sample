@@ -1,6 +1,6 @@
 import axios, { AxiosResponse } from 'axios';
 import Cookie from 'universal-cookie';
-import { TokenResponse, ICEServerInfo } from '../types';
+import { TokenResponse, ICEServerInfo, AppConfig } from '../types';
 
 interface SpeechTokenResponse {
   token: string;
@@ -22,6 +22,42 @@ interface AzureICEServerResponse {
     username?: string;
     credential?: string;
   }[];
+}
+
+/**
+ * アプリケーション設定を取得する関数
+ */
+export async function getAppConfig(): Promise<AppConfig> {
+    try {
+        const response = await axios.get<AppConfig>('/api/config');
+        console.log('App config loaded:', response.data);
+        return response.data;
+    } catch (error) {
+        console.error('Failed to load app config:', error);
+        // フォールバック設定
+        return {
+            voice: {
+                defaultName: 'ja-JP-NanamiNeural',
+                defaultLanguage: 'ja-JP'
+            },
+            avatar: {
+                defaultCharacter: 'lisa',
+                defaultStyle: 'casual-sitting',
+                defaultVideoFormat: 'mp4'
+            },
+            customVoice: {
+                enabled: false,
+                name: '',
+                deploymentId: ''
+            },
+            customAvatar: {
+                enabled: false,
+                character: '',
+                style: ''
+            },
+            region: 'southeastasia'
+        };
+    }
 }
 
 /**
