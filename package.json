@@ -1,0 +1,25 @@
+{
+  "name": "python-react-realtime-avatar-sample",
+  "version": "1.0.0",
+  "description": "PythonとReactを活用したリアルタイムカスタムアバターアプリサンプル",
+  "scripts": {
+    "install-all": "cd backend && pip install -r requirements.txt && cd ../frontend && npm install",
+    "start": "./start.sh",
+    "start:backend": "cd backend && python main.py",
+    "start:frontend": "cd frontend && npm start",
+    "build": "cd frontend && npm run build",
+    "test": "cd frontend && npm test"
+  },
+  "keywords": [
+    "azure",
+    "speech",
+    "avatar",
+    "realtime",
+    "python",
+    "react",
+    "fastapi",
+    "webrtc"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}
