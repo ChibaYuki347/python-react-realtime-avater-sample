@@ -45,15 +45,10 @@ export async function getAppConfig(): Promise<AppConfig> {
                 defaultStyle: 'casual-sitting',
                 defaultVideoFormat: 'mp4'
             },
-            customVoice: {
-                enabled: false,
-                name: '',
-                deploymentId: ''
-            },
+            availableCustomVoices: [],
+            customVoiceDeploymentIds: {},
             customAvatar: {
-                enabled: false,
-                character: '',
-                style: ''
+                enabled: false
             },
             region: 'southeastasia'
         };

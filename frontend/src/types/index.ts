@@ -27,15 +27,10 @@ export interface AppConfig {
     defaultStyle: string;
     defaultVideoFormat: string;
   };
-  customVoice: {
-    enabled: boolean;
-    name: string;
-    deploymentId: string;
-  };
+  availableCustomVoices: string[]; // 利用可能なカスタムボイス名のリスト
+  customVoiceDeploymentIds: { [voiceName: string]: string }; // ボイス名 -> デプロイメントID
   customAvatar: {
     enabled: boolean;
-    character: string;
-    style: string;
   };
   region: string;
 }
@@ -47,7 +42,8 @@ export interface AvatarSettings {
   avatarStyle: string;
   videoFormat: string;
   region: string;
+  availableCustomVoices: string[];
+  customAvatarEnabled: boolean;
   customVoiceEnabled: boolean;
   customVoiceDeploymentId: string;
-  customAvatarEnabled: boolean;
 }

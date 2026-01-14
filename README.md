@@ -6,12 +6,14 @@ Azure AI Speech サービスのカスタムボイスとカスタムアバター�
 ## ✨ 主な機能
 
 - 🎭 **リアルタイムアバター表示**: Azure Speech サービスを使用したリアルタイムアバター表示
-- 🎤 **カスタムボイス対応**: カスタム音声モデルの利用が可能
+- 🎤 **カスタムボイス対応**: Azure Speech サービスのカスタムボイス（Professional Voice）に完全対応
 - 👤 **カスタムアバター対応**: カスタムアバターキャラクターの利用が可能  
+- 🔗 **カスタムアバター + カスタムボイス**: カスタムアバターとカスタムボイスの組み合わせをサポート
 - ⚙️ **動的設定変更**: UIから音声・アバター設定をリアルタイムで変更
 - 🌐 **環境変数対応**: プロダクション環境での柔軟な設定管理
 - 🔒 **型安全**: TypeScriptによる完全な型安全性
 - 📱 **レスポンシブUI**: モダンで使いやすいユーザーインターフェース
+- 🎯 **Azure公式準拠**: Azure Speech Service公式ドキュメントに基づいた正しい実装
 
 ## 📁 プロジェクト構成
 
@@ -92,12 +94,32 @@ SPEECH_REGION=your-speech-service-region
 # Server Configuration
 PORT=8000
 
-# カスタム音声設定 (オプション)
-DEFAULT_VOICE_NAME=ja-JP-NanamiNeural
+# 音声設定
+# 標準音声の例: ja-JP-NanamiNeural, en-US-AriaNeural
+# カスタム音声の例: YourCustomVoiceName (リアルタイム合成ではボイス名をそのまま指定)
+DEFAULT_VOICE_NAME=Inoue-MultiLingual-Fast
 DEFAULT_VOICE_LANGUAGE=ja-JP
 
-# カスタムアバター設定 (オプション)
-DEFAULT_AVATAR_CHARACTER=lisa
+# アバター設定
+# 標準アバター: lisa, anna
+# カスタムアバター: YourCustomAvatarName
+DEFAULT_AVATAR_CHARACTER=Inoue
+DEFAULT_AVATAR_STYLE=ja-normal
+
+# アバタービデオフォーマット
+DEFAULT_VIDEO_FORMAT=mp4
+
+# カスタムアバター設定
+CUSTOM_AVATAR_ENABLED=true
+
+# 利用可能なカスタムボイス（カンマ区切り）
+# リアルタイム合成では、ボイス名を直接speechSynthesisVoiceNameに設定
+AVAILABLE_CUSTOM_VOICES=Inoue-MultiLingual-Fast,ja-JP-NanamiNeural,en-US-AriaNeural
+
+# カスタムボイスのデプロイメントID（JSON形式）
+# リアルタイム合成でendpointIdとして使用
+CUSTOM_VOICE_DEPLOYMENT_IDS={"Inoue-MultiLingual-Fast": "your-deployment-id"}
+```
 DEFAULT_AVATAR_STYLE=casual-sitting
 DEFAULT_VIDEO_FORMAT=mp4
 
@@ -139,15 +161,17 @@ npm start
 1. **アプリケーションにアクセス**
    - http://localhost:3000 をブラウザで開く
 
-2. **設定の調整**（オプション）
-   - 上部の設定パネルで音声やアバターをカスタマイズ
-   - 音声名: `ja-JP-NanamiNeural`, `en-US-AriaNeural` など
-   - アバターキャラクター: `lisa`, `anna` など
-   - アバタースタイル: `casual-sitting`, `formal-standing` など
+2. **設定の確認**
+   - 上部の設定パネルで現在の設定を確認
+   - 利用可能なボイス一覧から選択可能
+   - 音声名: `ja-JP-NanamiNeural`, `en-US-AriaNeural`, `Inoue-MultiLingual-Fast` など
+   - アバターキャラクター: `lisa`, `anna`, `Inoue` など
+   - アバタースタイル: `casual-sitting`, `ja-normal` など
 
 3. **アバターに接続**
    - 「アバターに接続」ボタンをクリック
    - 接続が完了するまで数秒待機
+   - デバッグ情報でリアルタイムな接続状況を確認可能
 
 4. **音声合成の実行**
    - テキスト入力欄にアバターに話させたい内容を入力
@@ -155,31 +179,43 @@ npm start
 
 ### カスタムボイス・アバターの使用方法
 
+#### 🎯 重要なポイント
+このアプリケーションは **リアルタイム合成** に対応しており、Azure Speech Service公式ドキュメントに基づいて実装されています。
+
 #### カスタムボイスの設定
-1. Azure Speech サービスでカスタムボイスを作成・デプロイ
-2. 設定パネルで「カスタムボイス使用」をチェック
-3. Deployment IDを入力
-4. 音声名にカスタムボイス名を入力
+
+**Professional Voice の場合:**
+1. Azure Speech サービスでProfessional Voiceを作成・デプロイ
+2. 環境変数でカスタムボイスを設定：
+```env
+AVAILABLE_CUSTOM_VOICES=YourCustomVoice-MultiLingual-Fast,ja-JP-NanamiNeural
+CUSTOM_VOICE_DEPLOYMENT_IDS={"YourCustomVoice-MultiLingual-Fast": "your-deployment-id"}
+```
+3. UIでカスタムボイスを選択して使用
+
+**Voice Sync for Avatar の場合:**
+- カスタムアバター作成時に同時にトレーニングされる音声
+- 対象アバター専用で、独立使用は不可
+- アプリケーションが自動的に適切な設定を適用
 
 #### カスタムアバターの設定
 1. Azure Speech サービスでカスタムアバターを作成・デプロイ
-2. 設定パネルで「カスタムアバター使用」をチェック
-3. アバターキャラクターにカスタムアバター名を入力
-
-#### 環境変数での事前設定
-プロダクション環境では `.env` ファイルで事前設定可能：
-
+2. 環境変数でカスタムアバターを設定：
 ```env
-# カスタムボイスの有効化
-CUSTOM_VOICE_ENABLED=true
-CUSTOM_VOICE_NAME=YourCustomVoice-Neural
-CUSTOM_VOICE_DEPLOYMENT_ID=your-deployment-id
-
-# カスタムアバターの有効化
 CUSTOM_AVATAR_ENABLED=true
-CUSTOM_AVATAR_CHARACTER=YourCustomAvatar
-CUSTOM_AVATAR_STYLE=custom-pose
+DEFAULT_AVATAR_CHARACTER=YourCustomAvatar
+DEFAULT_AVATAR_STYLE=your-style
 ```
+3. カスタムボイスとの組み合わせが可能
+
+#### 🔧 技術的な実装詳細
+
+**リアルタイム合成での重要な設定:**
+- **SpeechConfig.endpointId**: カスタムボイス使用時にデプロイメントIDを設定
+- **AvatarConfig.useBuiltInVoice**: カスタムアバター使用時の音声制御
+  - `true`: Voice Sync for Avatar使用
+  - `false`: 外部カスタムボイス使用
+- **SpeechConfig.speechSynthesisVoiceName**: ボイス名を直接指定
 
 ## 🏗️ 技術スタック
 
@@ -188,6 +224,7 @@ CUSTOM_AVATAR_STYLE=custom-pose
 - **Azure AI Speech SDK**: 音声認証トークンの取得とICEサーバー情報取得
 - **CORS対応**: フロントエンドとの安全な通信
 - **環境変数管理**: プロダクション対応の設定管理
+- **JSON設定管理**: カスタムボイスデプロイメントIDの動的管理
 
 ### フロントエンド
 - **React 18 + TypeScript**: 型安全なユーザーインターフェース
@@ -196,13 +233,14 @@ CUSTOM_AVATAR_STYLE=custom-pose
 - **Axios**: 型安全なHTTP通信
 - **完全な型定義**: エラーを防ぐTypeScript型システム
 - **レスポンシブデザイン**: モバイル対応UI
+- **動的設定管理**: リアルタイムでのボイス・アバター切り替え
 
 ## 📝 機能一覧
 
 ### ✅ 実装済み機能
 - **認証・接続**
   - Azure Speech サービス認証
-  - WebRTCによるP2P接続
+  - WebRTCによるP2P接続  
   - ICEサーバー最適化
   - 自動再接続機能
 
@@ -211,21 +249,29 @@ CUSTOM_AVATAR_STYLE=custom-pose
   - 標準アバター（lisa, anna等）
   - カスタムアバター対応
   - アバタースタイル変更
+  - **カスタムアバター + カスタムボイス組み合わせ**
 
 - **音声機能**  
   - テキスト音声合成
   - 標準音声（日本語、英語等）
-  - カスタムボイス対応
+  - **Professional Voice 完全対応**
+  - **Voice Sync for Avatar 対応**
   - SSML対応
+  - **リアルタイム合成最適化**
 
 - **設定管理**
   - UIからの動的設定変更
   - 環境変数による事前設定
-  - 設定の永続化
+  - **カスタムボイスデプロイメントID管理**
+  - **動的ボイス・アバター切り替え**
   - リアルタイム設定反映
 
 - **ユーザビリティ**
   - レスポンシブUI
+  - **詳細なデバッグ情報表示**
+  - エラーハンドリング
+  - **接続状態リアルタイム監視**
+  - **Azure公式準拠実装**
   - リアルタイムデバッグ情報
   - エラーハンドリング
   - 接続状態表示
@@ -245,15 +291,16 @@ CUSTOM_AVATAR_STYLE=custom-pose
 - **同時接続数**: 開発環境では同時接続数に制限があります
 
 ### カスタムボイス・アバターの制限
-- **カスタムボイス**: リアルタイムSDKでは限定的なサポート（Batch APIを推奨）
-- **カスタムアバター**: Azure Speech サービスでの事前作成・デプロイが必要
+- **Professional Voice**: リアルタイム合成で完全対応（endpointId設定済み）
+- **Voice Sync for Avatar**: カスタムアバター専用音声として自動適用
 - **リージョン制限**: カスタムリソースは特定のリージョンでのみ利用可能
+- **デプロイメントID**: 環境変数での正確な設定が必要
 
 ### 本番環境での考慮事項
-- **ICEサーバー**: デモ用STUNサーバーを使用、本番環境ではTURNサーバーが必要
-- **認証**: 現在は開発用の認証方式、本番環境ではより厳密な認証が必要
-- **スケーリング**: 大量のユーザーには Load Balancer と複数インスタンスが必要
-- **コスト**: Azure Speech サービスの利用料金に注意
+- **ICEサーバー**: 本番環境では専用TURNサーバーを推奨
+- **認証強化**: より厳密な認証機構の実装を推奨
+- **スケーリング**: Load Balancer と複数インスタンス対応
+- **コスト最適化**: Azure Speech サービス利用料金の監視が重要
 
 ## 🔗 API リファレンス
 
@@ -266,33 +313,56 @@ CUSTOM_AVATAR_STYLE=custom-pose
 ```json
 {
   "voice": {
-    "defaultName": "ja-JP-NanamiNeural",
+    "defaultName": "Inoue-MultiLingual-Fast",
     "defaultLanguage": "ja-JP"
   },
   "avatar": {
-    "defaultCharacter": "lisa",
-    "defaultStyle": "casual-sitting",
+    "defaultCharacter": "Inoue", 
+    "defaultStyle": "ja-normal",
     "defaultVideoFormat": "mp4"
   },
-  "customVoice": {
-    "enabled": false,
-    "name": "",
-    "deploymentId": ""
+  "availableCustomVoices": [
+    "Inoue-MultiLingual-Fast",
+    "ja-JP-NanamiNeural", 
+    "en-US-AriaNeural"
+  ],
+  "customVoiceDeploymentIds": {
+    "Inoue-MultiLingual-Fast": "0d890981-5f4d-4821-94b2-50ba46fb7400"
   },
   "customAvatar": {
-    "enabled": false,
-    "character": "",
-    "style": ""
+    "enabled": true
   },
-  "region": "eastus"
+  "region": "southeastasia"
 }
 ```
 
 #### `GET /api/get-speech-token`
 Azure Speech サービス認証トークンを取得
 
+**レスポンス例:**
+```json
+{
+  "authToken": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "region": "southeastasia"
+}
+```
+
 #### `GET /api/get-ice-server-info`  
 WebRTC用ICEサーバー情報を取得
+
+**レスポンス例:**
+```json
+[
+  {
+    "urls": ["stun:stun.l.google.com:19302"]
+  },
+  {
+    "urls": ["turn:turnserver.com:3478"],
+    "username": "user",
+    "credential": "pass"
+  }
+]
+```
 
 ## 🔧 カスタマイズガイド
 
@@ -381,11 +451,66 @@ speechConfig.speechSynthesisVoiceName = "ja-JP-NanamiNeural";
 - 設定値
 - 通信ログ
 
+## 🏗️ 実装詳細
+
+### リアルタイム合成でのカスタムボイス実装
+
+本アプリケーションは、Azure Speech Service公式ドキュメントに基づいて、リアルタイム合成でのカスタムボイス対応を正しく実装しています。
+
+#### 重要な実装ポイント
+
+**1. SpeechConfig設定**
+```typescript
+const speechConfig = speechSdk.SpeechConfig.fromAuthorizationToken(authToken, region);
+speechConfig.speechSynthesisVoiceName = voiceName;
+
+// カスタムボイス使用時の重要な設定
+if (customVoiceEnabled && deploymentId) {
+    (speechConfig as any).endpointId = deploymentId;
+}
+```
+
+**2. AvatarConfig設定**
+```typescript
+const avatarConfig = new speechSdk.AvatarConfig(character, style, videoFormat);
+
+if (customAvatarEnabled) {
+    (avatarConfig as any).customized = true;
+    
+    // カスタムアバター + カスタムボイスの制御
+    if (customVoiceEnabled) {
+        (avatarConfig as any).useBuiltInVoice = false; // 外部カスタムボイス使用
+    } else {
+        (avatarConfig as any).useBuiltInVoice = true;  // Voice Sync for Avatar使用
+    }
+}
+```
+
+#### Azure公式サンプルとの対応関係
+
+| Azure公式サンプル | 本実装 | 説明 |
+|---|---|---|
+| `endpointId` | `speechConfig.endpointId` | カスタムボイスのデプロイメントID |
+| `useBuiltInVoice` | `avatarConfig.useBuiltInVoice` | アバター内蔵音声の使用制御 |
+| `customized` | `avatarConfig.customized` | カスタムアバターフラグ |
+
+### 設定管理の仕組み
+
+**バックエンド（環境変数）→ API → フロントエンド**の流れで設定を管理：
+
+1. **環境変数**: 管理者が設定
+2. **FastAPI**: 設定をAPIで提供
+3. **React**: 動的に設定を取得・反映
+4. **Azure SDK**: 正しいパラメータでリアルタイム合成
+
 ## 📚 参考資料
 
 - [Azure AI Speech サービス ドキュメント](https://learn.microsoft.com/ja-jp/azure/ai-services/speech-service/)
+- [Custom text to speech avatar overview](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/text-to-speech-avatar/what-is-custom-text-to-speech-avatar)
+- [Real-time synthesis for text to speech avatar](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/text-to-speech-avatar/real-time-synthesis-avatar)
 - [リアルタイム音声合成の仕組み](./docs/realtime-synthesis-mechanism.md)
 - [Microsoft Speech SDK for JavaScript](https://github.com/Microsoft/cognitive-services-speech-sdk-js)
+- [Azure Speech SDK サンプル](https://github.com/Azure-Samples/cognitive-services-speech-sdk/blob/master/samples/js/browser/avatar/js/basic.js)
 
 ## 🤝 コントリビューション
 

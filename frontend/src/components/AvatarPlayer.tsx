@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as speechSdk from 'microsoft-cognitiveservices-speech-sdk';
 import { getTokenOrRefresh, getAvatarICEServerInfo, getAppConfig } from '../utils/speechUtils';
-import { AvatarPlayerProps, AvatarSettings } from '../types';
+import { AvatarPlayerProps, AvatarSettings, AppConfig } from '../types';
 
 const AvatarPlayer: React.FC<AvatarPlayerProps> = ({ 
   isConnected, 
@@ -14,6 +14,7 @@ const AvatarPlayer: React.FC<AvatarPlayerProps> = ({
     const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
     const [debugInfo, setDebugInfo] = useState<string[]>([]);
     const [connectionRetries, setConnectionRetries] = useState<number>(0);
+    const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
     const [avatarSettings, setAvatarSettings] = useState<AvatarSettings>({
         voiceName: 'ja-JP-NanamiNeural',
         voiceLanguage: 'ja-JP',
@@ -21,9 +22,10 @@ const AvatarPlayer: React.FC<AvatarPlayerProps> = ({
         avatarStyle: 'casual-sitting',
         videoFormat: 'mp4',
         region: 'eastus',
+        availableCustomVoices: [],
+        customAvatarEnabled: false,
         customVoiceEnabled: false,
-        customVoiceDeploymentId: '',
-        customAvatarEnabled: false
+        customVoiceDeploymentId: ''
     });
     
     // refs with proper typing
@@ -46,18 +48,28 @@ const AvatarPlayer: React.FC<AvatarPlayerProps> = ({
         const loadConfig = async () => {
             try {
                 const config = await getAppConfig();
+                setAppConfig(config); // 設定を保存
+                
+                // デフォルトボイスまたはカスタムボイスを選択
+                const selectedVoiceName = config.voice.defaultName;
+                
+                // カスタムボイスかどうかを判定し、デプロイメントIDを取得
+                const isCustomVoice = config.availableCustomVoices?.includes(selectedVoiceName) || false;
+                const deploymentId = isCustomVoice ? config.customVoiceDeploymentIds?.[selectedVoiceName] || '' : '';
+                
                 setAvatarSettings({
-                    voiceName: config.customVoice?.enabled ? config.customVoice.name : config.voice.defaultName,
+                    voiceName: selectedVoiceName,
                     voiceLanguage: config.voice.defaultLanguage,
-                    avatarCharacter: config.customAvatar?.enabled ? config.customAvatar.character : config.avatar.defaultCharacter,
-                    avatarStyle: config.customAvatar?.enabled ? config.customAvatar.style : config.avatar.defaultStyle,
+                    avatarCharacter: config.avatar.defaultCharacter,
+                    avatarStyle: config.avatar.defaultStyle,
                     videoFormat: config.avatar.defaultVideoFormat,
                     region: config.region,
-                    customVoiceEnabled: config.customVoice?.enabled || false,
-                    customVoiceDeploymentId: config.customVoice?.deploymentId || '',
-                    customAvatarEnabled: config.customAvatar?.enabled || false
+                    availableCustomVoices: config.availableCustomVoices || [],
+                    customAvatarEnabled: config.customAvatar?.enabled || false,
+                    customVoiceEnabled: isCustomVoice,
+                    customVoiceDeploymentId: deploymentId
                 });
-                addDebugInfo(`設定読み込み完了: voice=${config.customVoice?.enabled ? config.customVoice.name : config.voice.defaultName}, avatar=${config.customAvatar?.enabled ? config.customAvatar.character : config.avatar.defaultCharacter}`);
+                addDebugInfo(`設定読み込み完了: voice=${selectedVoiceName}, isCustomVoice=${isCustomVoice}, deploymentId=${deploymentId}, avatar=${config.avatar.defaultCharacter}`);
             } catch (error) {
                 console.error('設定読み込み失敗:', error);
                 addDebugInfo(`設定読み込み失敗: ${error}`);
@@ -120,8 +132,16 @@ const AvatarPlayer: React.FC<AvatarPlayerProps> = ({
         const speechConfig = speechSdk.SpeechConfig.fromAuthorizationToken(authToken, region);
         speechConfig.speechSynthesisLanguage = avatarSettings.voiceLanguage;
         speechConfig.speechSynthesisVoiceName = avatarSettings.voiceName;
+        
+        // カスタムボイス使用時の設定
+        if (avatarSettings.customVoiceEnabled && avatarSettings.customVoiceDeploymentId) {
+            // エンドポイントIDを設定
+            (speechConfig as any).endpointId = avatarSettings.customVoiceDeploymentId;
+            addDebugInfo(`カスタムボイスエンドポイントID設定: ${avatarSettings.customVoiceDeploymentId}`);
+        }
+        
         speechConfigRef.current = speechConfig;
-        addDebugInfo(`Speech Config作成完了: lang=${speechConfig.speechSynthesisLanguage}, voice=${speechConfig.speechSynthesisVoiceName}`);
+        addDebugInfo(`Speech Config作成完了: lang=${speechConfig.speechSynthesisLanguage}, voice=${speechConfig.speechSynthesisVoiceName}, customVoice=${avatarSettings.customVoiceEnabled}`);
 
         setStatus('アバター設定中...');
         
@@ -135,6 +155,15 @@ const AvatarPlayer: React.FC<AvatarPlayerProps> = ({
         // カスタムアバターの場合はcustomizedをtrueに設定
         if (avatarSettings.customAvatarEnabled) {
             (avatarConfig as any).customized = true;
+            
+            // カスタムアバター使用時、カスタムボイスを使う場合はuseBuiltInVoiceをfalseに設定
+            if (avatarSettings.customVoiceEnabled) {
+                (avatarConfig as any).useBuiltInVoice = false;
+                addDebugInfo(`useBuiltInVoice設定: false（カスタムボイス使用）`);
+            } else {
+                (avatarConfig as any).useBuiltInVoice = true;
+                addDebugInfo(`useBuiltInVoice設定: true（Voice Sync for Avatar使用）`);
+            }
         }
         
         addDebugInfo(`アバター設定作成完了: character=${avatarSettings.avatarCharacter}, style=${avatarSettings.avatarStyle}, customized=${avatarSettings.customAvatarEnabled}`);
@@ -375,13 +404,6 @@ const AvatarPlayer: React.FC<AvatarPlayerProps> = ({
         // アバターシンセサイザーを作成
         const avatarSynthesizer = new speechSdk.AvatarSynthesizer(speechConfig, avatarConfig);
         
-        // カスタムボイスの設定
-        if (avatarSettings.customVoiceEnabled && avatarSettings.customVoiceDeploymentId) {
-            // Note: カスタムボイスは通常はBatch APIで使用されます
-            // リアルタイムSDKでは限定的なサポートのため、コメントで残しておきます
-            addDebugInfo(`カスタムボイス設定: ${avatarSettings.voiceName} (ID: ${avatarSettings.customVoiceDeploymentId})`);
-        }
-        
         avatarSynthesizerRef.current = avatarSynthesizer;
         addDebugInfo("AvatarSynthesizer作成完了");
 
@@ -587,27 +609,53 @@ const AvatarPlayer: React.FC<AvatarPlayerProps> = ({
                 
                 {/* カスタムボイス設定 */}
                 <div style={{gridColumn: '1 / -1', borderTop: '1px solid #ddd', paddingTop: '15px', marginTop: '10px'}}>
-                    <label style={{display: 'flex', alignItems: 'center', fontWeight: 'bold', marginBottom: '10px'}}>
-                        <input
-                            type="checkbox"
-                            checked={avatarSettings.customVoiceEnabled}
-                            onChange={(e) => setAvatarSettings(prev => ({...prev, customVoiceEnabled: e.target.checked}))}
-                            style={{marginRight: '8px'}}
-                        />
-                        カスタムボイス使用
-                    </label>
-                    {avatarSettings.customVoiceEnabled && (
-                        <div style={{marginLeft: '20px', display: 'grid', gap: '10px'}}>
-                            <div>
-                                <label style={{display: 'block', marginBottom: '5px'}}>Deployment ID:</label>
-                                <input
-                                    type="text"
-                                    value={avatarSettings.customVoiceDeploymentId}
-                                    onChange={(e) => setAvatarSettings(prev => ({...prev, customVoiceDeploymentId: e.target.value}))}
-                                    placeholder="your-custom-voice-deployment-id"
-                                    style={{width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc'}}
-                                />
+                    <h4 style={{margin: '0 0 10px 0', fontWeight: 'bold'}}>利用可能なボイス</h4>
+                    {avatarSettings.availableCustomVoices.length > 0 ? (
+                        <div>
+                            <label style={{display: 'block', marginBottom: '5px'}}>利用可能なボイス:</label>
+                            <div style={{backgroundColor: '#f8f9fa', padding: '10px', borderRadius: '4px', border: '1px solid #dee2e6'}}>
+                                {avatarSettings.availableCustomVoices.map((voiceName) => (
+                                    <div key={voiceName} style={{
+                                        display: 'flex', 
+                                        justifyContent: 'space-between', 
+                                        alignItems: 'center',
+                                        marginBottom: '5px',
+                                        padding: '5px',
+                                        backgroundColor: voiceName === avatarSettings.voiceName ? '#e3f2fd' : 'transparent',
+                                        borderRadius: '3px'
+                                    }}>
+                                        <span><strong>{voiceName}</strong></span>
+                                        <button
+                                            onClick={() => {
+                                                const isCustomVoice = avatarSettings.availableCustomVoices.includes(voiceName);
+                                                const deploymentId = isCustomVoice ? (appConfig?.customVoiceDeploymentIds?.[voiceName] || '') : '';
+                                                setAvatarSettings(prev => ({
+                                                    ...prev, 
+                                                    voiceName,
+                                                    customVoiceEnabled: isCustomVoice,
+                                                    customVoiceDeploymentId: deploymentId
+                                                }));
+                                            }}
+                                            style={{
+                                                padding: '2px 8px',
+                                                fontSize: '12px',
+                                                backgroundColor: voiceName === avatarSettings.voiceName ? '#1976d2' : '#6c757d',
+                                                color: 'white',
+                                                border: 'none',
+                                                borderRadius: '3px',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            {voiceName === avatarSettings.voiceName ? '選択中' : '選択'}
+                                        </button>
+                                    </div>
+                                ))}
                             </div>
+                        </div>
+                    ) : (
+                        <div style={{color: '#6c757d', fontStyle: 'italic'}}>
+                            利用可能なボイスが設定されていません。環境変数 AVAILABLE_CUSTOM_VOICES で設定してください。<br/>
+                            <strong>例:</strong> CUSTOM_VOICES={`{"MyVoice1": "deployment-id-1", "MyVoice2": "deployment-id-2"}`}
                         </div>
                     )}
                 </div>
