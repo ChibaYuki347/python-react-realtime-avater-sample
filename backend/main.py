@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+import json
 import os
 import httpx
 from dotenv import load_dotenv
@@ -33,11 +34,16 @@ DEFAULT_VIDEO_FORMAT = os.getenv("DEFAULT_VIDEO_FORMAT", "mp4")
 
 # カスタム設定
 CUSTOM_AVATAR_ENABLED = os.getenv("CUSTOM_AVATAR_ENABLED", "false").lower() == "true"
-CUSTOM_AVATAR_CHARACTER = os.getenv("CUSTOM_AVATAR_CHARACTER", "")
-CUSTOM_AVATAR_STYLE = os.getenv("CUSTOM_AVATAR_STYLE", "")
-CUSTOM_VOICE_ENABLED = os.getenv("CUSTOM_VOICE_ENABLED", "false").lower() == "true"
-CUSTOM_VOICE_NAME = os.getenv("CUSTOM_VOICE_NAME", "")
-CUSTOM_VOICE_DEPLOYMENT_ID = os.getenv("CUSTOM_VOICE_DEPLOYMENT_ID", "")
+
+# 利用可能なカスタムボイスのリストを取得
+AVAILABLE_CUSTOM_VOICES_STR = os.getenv("AVAILABLE_CUSTOM_VOICES", "")
+AVAILABLE_CUSTOM_VOICES = [voice.strip() for voice in AVAILABLE_CUSTOM_VOICES_STR.split(",") if voice.strip()] if AVAILABLE_CUSTOM_VOICES_STR else []
+
+# カスタムボイスのデプロイメントIDを取得
+try:
+    CUSTOM_VOICE_DEPLOYMENT_IDS = json.loads(os.getenv("CUSTOM_VOICE_DEPLOYMENT_IDS", "{}"))
+except json.JSONDecodeError:
+    CUSTOM_VOICE_DEPLOYMENT_IDS = {}
 
 @app.get("/")
 async def root():
@@ -57,15 +63,10 @@ async def get_config():
                 "defaultStyle": DEFAULT_AVATAR_STYLE,
                 "defaultVideoFormat": DEFAULT_VIDEO_FORMAT
             },
-            "customVoice": {
-                "enabled": CUSTOM_VOICE_ENABLED,
-                "name": CUSTOM_VOICE_NAME,
-                "deploymentId": CUSTOM_VOICE_DEPLOYMENT_ID
-            },
+            "availableCustomVoices": AVAILABLE_CUSTOM_VOICES,
+            "customVoiceDeploymentIds": CUSTOM_VOICE_DEPLOYMENT_IDS,
             "customAvatar": {
-                "enabled": CUSTOM_AVATAR_ENABLED,
-                "character": CUSTOM_AVATAR_CHARACTER,
-                "style": CUSTOM_AVATAR_STYLE
+                "enabled": CUSTOM_AVATAR_ENABLED
             },
             "region": os.getenv("SPEECH_REGION")
         }
