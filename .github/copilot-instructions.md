@@ -17,9 +17,9 @@
 - `backend/.env.example`: 環境変数テンプレート
 
 ### フロントエンド構成
-- `frontend/src/App.js`: メインReactアプリケーション
-- `frontend/src/components/AvatarPlayer.js`: アバター表示・制御コンポーネント
-- `frontend/src/utils/speechUtils.js`: Azure Speech SDK関連ユーティリティ
+- `frontend/src/App.tsx`: メインReactアプリケーション
+- `frontend/src/components/AvatarPlayer.tsx`: アバター表示・制御コンポーネント
+- `frontend/src/utils/speechUtils.ts`: Azure Speech SDK関連ユーティリティ
 
 ## コーディングルール
 
@@ -36,7 +36,7 @@
 - 適切な例外処理とログ出力を実装します。
 - 環境変数を使用した設定管理を行います。
 
-## React(TypeScript/JavaScript)コードスタイル
+## React(TypeScript)コードスタイル
 - 関数コンポーネントとHooksを使用します。
 - PropTypesまたはTypeScriptでの型安全性を確保します。
 - useEffect、useStateなどのHooksを適切に使用します。
