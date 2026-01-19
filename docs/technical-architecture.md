@@ -1,4 +1,4 @@
-# 技術アーキテクチャ設計: AI強化アバターシステム
+# 技術アーキテクチャ設計: AI 強化アバターシステム
 
 ## システム全体アーキテクチャ
 
@@ -11,7 +11,7 @@ graph TB
         D[useVoiceRecognition Hook]
         E[aiService Client]
     end
-    
+
     subgraph "Backend (FastAPI + Python)"
         F[Speech-to-Text Service]
         G[AI Service]
@@ -19,7 +19,7 @@ graph TB
         I[Avatar Control API]
         J[WebSocket Handler]
     end
-    
+
     subgraph "Azure Services"
         K[Azure Speech Service]
         L[Azure OpenAI/GitHub Models]
@@ -27,7 +27,7 @@ graph TB
         N[Azure Cosmos DB]
         O[Application Insights]
     end
-    
+
     A --> F
     A --> J
     B --> G
@@ -36,13 +36,13 @@ graph TB
     D --> F
     E --> G
     E --> H
-    
+
     F --> K
     G --> L
     H --> M
     I --> K
     J --> K
-    
+
     G --> N
     H --> N
     F --> O
@@ -62,7 +62,7 @@ sequenceDiagram
     participant S as Azure Speech
     participant AI as Azure OpenAI
     participant AS as Azure AI Search
-    
+
     U->>F: 音声入力開始
     F->>B: WebSocket接続 + 音声ストリーム
     B->>S: Speech-to-Text認識
@@ -117,7 +117,7 @@ interface VoiceRecognitionResult {
 }
 ```
 
-### 2. AI対話システム
+### 2. AI 対話システム
 
 #### aiService Client
 
@@ -143,7 +143,7 @@ interface ConversationContext {
 }
 ```
 
-### 3. RAG検索システム
+### 3. RAG 検索システム
 
 #### SearchService
 
@@ -157,16 +157,16 @@ class DocumentSource:
 
 class RAGSearchService:
     async def search_documents(
-        self, 
-        query: str, 
+        self,
+        query: str,
         top_k: int = 5,
         filters: Optional[Dict] = None
     ) -> List[DocumentSource]:
         pass
-    
+
     async def generate_context(
-        self, 
-        query: str, 
+        self,
+        query: str,
         search_results: List[DocumentSource]
     ) -> str:
         pass
@@ -203,13 +203,18 @@ class ChatMessage(BaseModel):
 {
   "name": "documents-index",
   "fields": [
-    {"name": "id", "type": "Edm.String", "key": true},
-    {"name": "title", "type": "Edm.String", "searchable": true},
-    {"name": "content", "type": "Edm.String", "searchable": true},
-    {"name": "category", "type": "Edm.String", "filterable": true},
-    {"name": "url", "type": "Edm.String"},
-    {"name": "created_at", "type": "Edm.DateTimeOffset", "sortable": true},
-    {"name": "content_vector", "type": "Collection(Edm.Single)", "searchable": true, "vectorSearchDimensions": 1536}
+    { "name": "id", "type": "Edm.String", "key": true },
+    { "name": "title", "type": "Edm.String", "searchable": true },
+    { "name": "content", "type": "Edm.String", "searchable": true },
+    { "name": "category", "type": "Edm.String", "filterable": true },
+    { "name": "url", "type": "Edm.String" },
+    { "name": "created_at", "type": "Edm.DateTimeOffset", "sortable": true },
+    {
+      "name": "content_vector",
+      "type": "Collection(Edm.Single)",
+      "searchable": true,
+      "vectorSearchDimensions": 1536
+    }
   ],
   "vectorSearch": {
     "profiles": [
@@ -223,11 +228,11 @@ class ChatMessage(BaseModel):
 }
 ```
 
-## API設計
+## API 設計
 
 ### RESTful API エンドポイント
 
-#### 音声認識API
+#### 音声認識 API
 
 ```python
 @router.post("/api/speech/recognize")
@@ -241,7 +246,7 @@ async def recognize_speech(
 async def stream_speech_recognition(websocket: WebSocket)
 ```
 
-#### AI対話API  
+#### AI 対話 API
 
 ```python
 @router.post("/api/ai/chat")
@@ -254,7 +259,7 @@ async def get_session(session_id: str) -> ConversationSession
 async def delete_session(session_id: str) -> DeleteResult
 ```
 
-#### RAG検索API
+#### RAG 検索 API
 
 ```python
 @router.post("/api/search/semantic")
@@ -301,7 +306,7 @@ class UserSession:
 # API キー管理
 class APIKeyManager:
     async def get_azure_openai_key(self) -> str
-    async def get_speech_service_key(self) -> str  
+    async def get_speech_service_key(self) -> str
     async def get_search_service_key(self) -> str
 ```
 
@@ -321,12 +326,13 @@ class DataRetentionPolicy:
 ```
 
 ### 3. レート制限
+
 ```python
 # Redis ベースのレート制限
 class RateLimiter:
     async def check_rate_limit(
-        self, 
-        user_id: str, 
+        self,
+        user_id: str,
         endpoint: str,
         window_seconds: int = 60,
         max_requests: int = 100
@@ -341,16 +347,16 @@ class RateLimiter:
 # Redis キャッシュ
 class CacheService:
     async def cache_ai_response(
-        self, 
-        query_hash: str, 
-        response: str, 
+        self,
+        query_hash: str,
+        response: str,
         ttl_seconds: int = 3600
     ) -> None
-    
+
     async def cache_search_results(
-        self, 
-        query_hash: str, 
-        results: List[DocumentSource], 
+        self,
+        query_hash: str,
+        results: List[DocumentSource],
         ttl_seconds: int = 1800
     ) -> None
 ```
@@ -364,40 +370,41 @@ async def process_audio_async(audio_data: bytes, session_id: str) -> None:
     """音声データの非同期処理"""
     pass
 
-@celery_app.task  
+@celery_app.task
 async def update_search_index(document: Document) -> None:
     """検索インデックスの非同期更新"""
     pass
 ```
 
 ### 3. 接続プール管理
+
 ```python
 # データベース接続プール
 class ConnectionManager:
     cosmos_client: CosmosClient
     search_client: SearchClient
     redis_client: Redis
-    
+
     async def init_connections(self) -> None
     async def close_connections(self) -> None
 ```
 
 ## 監視・ログ設計
 
-### 1. Application Insights統合
+### 1. Application Insights 統合
 
 ```python
 class TelemetryService:
     async def track_conversation_event(
-        self, 
-        session_id: str, 
+        self,
+        session_id: str,
         event_type: str,
         properties: Dict[str, Any]
     ) -> None
-    
+
     async def track_performance_metric(
-        self, 
-        metric_name: str, 
+        self,
+        metric_name: str,
         value: float,
         tags: Dict[str, str]
     ) -> None
@@ -429,7 +436,7 @@ from prometheus_client import Counter, Histogram, Gauge
 CONVERSATION_COUNT = Counter('conversations_total', 'Total conversations')
 ERROR_COUNT = Counter('errors_total', 'Total errors', ['error_type'])
 
-# ヒストグラム  
+# ヒストグラム
 RESPONSE_TIME = Histogram('response_time_seconds', 'Response time distribution')
 AUDIO_PROCESSING_TIME = Histogram('audio_processing_seconds', 'Audio processing time')
 
@@ -439,4 +446,4 @@ ACTIVE_SESSIONS = Gauge('active_sessions', 'Number of active sessions')
 
 ---
 
-*この技術設計書は実装の進捗に応じて継続的に更新・詳細化されます。*
+_この技術設計書は実装の進捗に応じて継続的に更新・詳細化されます。_
