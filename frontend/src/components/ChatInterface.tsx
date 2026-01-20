@@ -26,6 +26,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [sessionId, setSessionId] = useState<string>('');
   const [streamingResponse, setStreamingResponse] = useState('');
   const [lastAIResponse, setLastAIResponse] = useState<string>('');
+  const [useRAG, setUseRAG] = useState<boolean>(false); // RAG使用オプション
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -62,21 +63,68 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       // Create abort controller for this request
       abortControllerRef.current = new AbortController();
 
-      const response = await fetch('/api/ai/chat/stream', {
+      // RAGまたは通常のAI応答を選択
+      const endpoint = useRAG ? '/api/rag/query' : '/api/ai/chat/stream';
+      const requestBody = useRAG 
+        ? {
+            user_id: 'user_001',  // TODO: 実際のユーザーIDに変更
+            query: userMessage,
+            conversation_id: sessionId || undefined,
+            max_results: 5
+          }
+        : {
+            message: userMessage,
+            session_id: sessionId || undefined,
+            max_tokens: 2000,
+            temperature: 0.7
+          };
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          message: userMessage,
-          session_id: sessionId || undefined,
-          max_tokens: 2000,
-          temperature: 0.7
-        }),
+        body: JSON.stringify(requestBody),
         signal: abortControllerRef.current.signal
       });
 
       if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // RAGレスポンスの場合は直接JSONを処理
+      if (useRAG) {
+        const ragResponse = await response.json();
+        console.log('RAG Response received:', ragResponse);
+        
+        const finalResponse = ragResponse.answer || 'RAG応答の取得に失敗しました。';
+        
+        const assistantMessage: Message = {
+          id: `assistant-${Date.now()}`,
+          role: 'assistant', 
+          content: finalResponse,
+          timestamp: new Date().toISOString()
+        };
+        
+        setMessages(prev => [...prev, assistantMessage]);
+        setLastAIResponse(finalResponse);
+        setSessionId(ragResponse.conversation_id || sessionId);
+        
+        // RAG応答での自動読み上げ
+        if (speakWithAvatarFunction && finalResponse.trim()) {
+          console.log('RAG自動アバター読み上げ開始:', finalResponse);
+          try {
+            speakWithAvatarFunction(finalResponse);
+          } catch (error) {
+            console.error('RAG自動読み上げエラー:', error);
+          }
+        }
+        
+        if (onNewMessage) {
+          onNewMessage(userMessage, finalResponse);
+        }
+        return;
+      }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
@@ -194,7 +242,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         inputRef.current.blur();
       }
     }
-  }, [inputMessage, isLoading, sessionId, onNewMessage, speakWithAvatarFunction]);
+  }, [inputMessage, isLoading, sessionId, onNewMessage, speakWithAvatarFunction, useRAG]);
 
   // Handle Enter key press
   const handleKeyPress = useCallback((e: React.KeyboardEvent) => {
@@ -237,8 +285,22 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   return (
     <div className={`chat-interface ${className}`}>
       <div className="chat-header">
-        <h3>AI アシスタント (Azure OpenAI GPT-4.1)</h3>
+        <h3>AI アシスタント {useRAG ? '(RAG + GPT-4.1)' : '(Azure OpenAI GPT-4.1)'}</h3>
         <div className="chat-controls">
+          {/* RAGオプション選択 */}
+          <div className="rag-toggle">
+            <label className="rag-switch">
+              <input 
+                type="checkbox" 
+                checked={useRAG} 
+                onChange={(e) => setUseRAG(e.target.checked)}
+                disabled={isLoading}
+              />
+              <span className="rag-slider"></span>
+              <span className="rag-label">RAG検索</span>
+            </label>
+          </div>
+          
           {sessionId && (
             <span className="session-info">Session: {sessionId.slice(-8)}</span>
           )}

@@ -9,14 +9,16 @@ import logging
 
 # Import new AI routes
 from routes.ai_routes import router as ai_router
+# Import new RAG routes  
+from routes.rag_routes import router as rag_router
 
 # 環境変数を読み込み
 load_dotenv()
 
 app = FastAPI(
     title="AI強化リアルタイムアバターAPI", 
-    version="1.0.0",
-    description="Azure OpenAI GPT-4.1統合によるAI応答機能付きリアルタイムアバターシステム"
+    version="2.0.0",
+    description="GPT-4.1統合によるRAG対応AI応答機能付きリアルタイムアバターシステム"
 )
 
 # CORS設定
@@ -34,6 +36,8 @@ logger = logging.getLogger(__name__)
 
 # AI routes registration
 app.include_router(ai_router, prefix="/api")
+# RAG routes registration
+app.include_router(rag_router)
 
 # Azure configuration from environment (fallback for local development)
 KEY_VAULT_URL = os.getenv("KEY_VAULT_URL", "https://ai-avatar-staging-kv.vault.azure.net/")
