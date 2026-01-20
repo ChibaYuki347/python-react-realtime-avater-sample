@@ -15,13 +15,13 @@ param openAIConfig = {
       name: 'gpt-4-1'
       model: 'gpt-4.1'
       version: '2025-04-14'
-      capacity: 30
+      capacity: 10
     }
     {
       name: 'text-embedding-3-large'
       model: 'text-embedding-3-large'
       version: '1'
-      capacity: 30
+      capacity: 10
     }
   ]
 }

@@ -123,16 +123,16 @@ DEPLOYMENT_OUTPUT=$(az deployment sub create \
                openAIConfig='{
                  "deployments": [
                    {
-                     "name": "gpt-4o",
-                     "model": "gpt-4o",
-                     "version": "2024-08-06",
-                     "capacity": 30
+                     "name": "gpt-4-1",
+                     "model": "gpt-4.1",
+                     "version": "2025-04-14",
+                     "capacity": 10
                    },
                    {
                      "name": "text-embedding-3-large",
                      "model": "text-embedding-3-large",
                      "version": "1",
-                     "capacity": 30
+                     "capacity": 10
                    }
                  ]
                }' \
@@ -218,7 +218,7 @@ SPEECH_REGION=$LOCATION
 
 # Azure OpenAI設定
 AZURE_OPENAI_API_KEY=\${KEY_VAULT_SECRET:openai-api-key}
-AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4o
+AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4-1
 AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME=text-embedding-3-large
 AZURE_OPENAI_API_VERSION=2024-02-01
 
