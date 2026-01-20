@@ -7,18 +7,23 @@ const App: React.FC = () => {
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [message, setMessage] = useState<string>('');
   const [isAIMode, setIsAIMode] = useState<boolean>(true);
+  const [speakWithAvatarFunction, setSpeakWithAvatarFunction] = useState<((text: string) => Promise<void>) | null>(null);
 
-  // Handle AI chat response - make avatar speak the AI response
+  // アバター読み上げ関数を受け取る
+  const handleSpeakWithAvatarReady = useCallback((speakFunction: (text: string) => Promise<void>) => {
+    setSpeakWithAvatarFunction(() => speakFunction);
+  }, []);
+
+  // Handle AI chat response - no longer needed for auto-speak (handled in ChatInterface)
   const handleAIResponse = useCallback((userMessage: string, aiResponse: string) => {
     console.log('AI Response received:', { userMessage, aiResponse });
     
-    // アバターで自動再生するかユーザーの選択に任せるか
-    // 現在は手動ボタンでの再生に変更
-    if (aiResponse && aiResponse.trim()) {
-      console.log('Setting message for avatar:', aiResponse.trim());
-      // Set the AI response as the message for avatar to speak
-      setMessage(aiResponse.trim());
-    }
+    // ChatInterfaceで自動読み上げを行うため、ここでは手動用のメッセージ設定のみ
+    // コメントアウト: 自動読み上げは ChatInterface で処理
+    // if (aiResponse && aiResponse.trim()) {
+    //   console.log('Setting message for avatar:', aiResponse.trim());
+    //   setMessage(aiResponse.trim());
+    // }
   }, []);
 
   // Handle manual text input for avatar
@@ -56,6 +61,7 @@ const App: React.FC = () => {
             setIsConnected={setIsConnected}
             message={message}
             setMessage={setMessage}
+            onSpeakWithAvatarReady={handleSpeakWithAvatarReady}
           />
           
           <div className="avatar-status">
@@ -72,6 +78,7 @@ const App: React.FC = () => {
               <ChatInterface 
                 onNewMessage={handleAIResponse}
                 className="ai-chat-interface"
+                speakWithAvatarFunction={speakWithAvatarFunction}
               />
               <p className="ai-description">
                 AIとの会話内容が自動的にアバターで音声合成されます

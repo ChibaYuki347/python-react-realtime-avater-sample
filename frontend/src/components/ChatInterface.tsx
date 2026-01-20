@@ -12,11 +12,13 @@ interface Message {
 interface ChatInterfaceProps {
   onNewMessage?: (message: string, response: string) => void;
   className?: string;
+  speakWithAvatarFunction?: ((text: string) => Promise<void>) | null;
 }
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   onNewMessage,
-  className = ''
+  className = '',
+  speakWithAvatarFunction
 }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -110,66 +112,51 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   throw new Error(data.error);
                 }
                 
-              if (data.type === 'content') {
-                console.log('Adding content:', data.content);
-                fullResponse += data.content;
-                setStreamingResponse(fullResponse);
-                console.log('Current fullResponse:', fullResponse);
-              }
-                
-                // ストリーミング完了
-                if (data.done) {
-                  console.log('Streaming complete, final response:', fullResponse); // デバッグログ
-                  // Final response received
-                  const assistantMessage: Message = {
-                    id: `assistant-${Date.now()}`,
-                    role: 'assistant',
-                    content: fullResponse,
-                    timestamp: new Date().toISOString()
-                  };
-                  
-                  setMessages(prev => [...prev, assistantMessage]);
-                  setStreamingResponse('');
-                  setLastAIResponse(fullResponse);  // 最後のAI応答を保存
-                  
-                  // Call onNewMessage callback if provided
-                  if (onNewMessage) {
-                    onNewMessage(userMessage, fullResponse);
-                  }
-                  break;
-                }
-                
-                // レガシーフォーマット対応（後方互換性）
-                if (data.type === 'session' && data.session_id) {
-                  currentSessionId = data.session_id;
-                  setSessionId(currentSessionId);
-                }
-                
-                if (data.type === 'content' && data.content) {
+                if (data.type === 'content') {
+                  console.log('Adding content:', data.content);
                   fullResponse += data.content;
                   setStreamingResponse(fullResponse);
-                }
-                
-                if (data.type === 'complete') {
-                  // Final response received
+                  console.log('Current fullResponse:', fullResponse);
+                } else if (data.type === 'complete') {
+                  // ストリーミング完了 - full_responseを使用
+                  const finalResponse = data.full_response || fullResponse;
+                  console.log('Streaming complete, final response:', finalResponse);
+                  
                   const assistantMessage: Message = {
                     id: `assistant-${Date.now()}`,
                     role: 'assistant',
-                    content: data.full_response || fullResponse,
+                    content: finalResponse,
                     timestamp: new Date().toISOString()
                   };
                   
                   setMessages(prev => [...prev, assistantMessage]);
                   setStreamingResponse('');
+                  setLastAIResponse(finalResponse);  // 最後のAI応答を保存
+                  
+                  // 自動でアバターに読み上げさせる
+                  if (speakWithAvatarFunction && finalResponse.trim()) {
+                    console.log('自動アバター読み上げ開始:', finalResponse);
+                    try {
+                      speakWithAvatarFunction(finalResponse);
+                    } catch (error) {
+                      console.error('自動読み上げエラー:', error);
+                    }
+                  } else {
+                    console.log('自動読み上げスキップ:', {
+                      hasSpeakFunction: !!speakWithAvatarFunction,
+                      hasContent: !!finalResponse.trim()
+                    });
+                  }
                   
                   // Call onNewMessage callback if provided
                   if (onNewMessage) {
-                    onNewMessage(userMessage, data.full_response || fullResponse);
+                    onNewMessage(userMessage, finalResponse);
                   }
                   break;
-                }
-                
-                if (data.type === 'error') {
+                } else if (data.type === 'session' && data.session_id) {
+                  currentSessionId = data.session_id;
+                  setSessionId(currentSessionId);
+                } else if (data.type === 'error') {
                   throw new Error(data.message);
                 }
               } catch (parseError) {
@@ -207,7 +194,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         inputRef.current.blur();
       }
     }
-  }, [inputMessage, isLoading, sessionId, onNewMessage]);
+  }, [inputMessage, isLoading, sessionId, onNewMessage, speakWithAvatarFunction]);
 
   // Handle Enter key press
   const handleKeyPress = useCallback((e: React.KeyboardEvent) => {
@@ -233,11 +220,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   }, []);
 
   // Send last AI response to avatar
-  const speakWithAvatar = useCallback(() => {
-    if (lastAIResponse && onNewMessage) {
-      onNewMessage('', lastAIResponse);
+  const handleSpeakWithAvatar = useCallback(() => {
+    if (lastAIResponse && speakWithAvatarFunction) {
+      speakWithAvatarFunction(lastAIResponse);
     }
-  }, [lastAIResponse, onNewMessage]);
+  }, [lastAIResponse, speakWithAvatarFunction]);
 
   // Format timestamp
   const formatTimestamp = useCallback((timestamp: string) => {
@@ -256,7 +243,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             <span className="session-info">Session: {sessionId.slice(-8)}</span>
           )}
           <button 
-            onClick={speakWithAvatar}
+            onClick={handleSpeakWithAvatar}
             className="avatar-btn"
             disabled={!lastAIResponse || isLoading}
             title="最後のAI応答をアバターで再生"

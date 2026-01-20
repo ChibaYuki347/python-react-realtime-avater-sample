@@ -7,7 +7,8 @@ const AvatarPlayer: React.FC<AvatarPlayerProps> = ({
   isConnected, 
   setIsConnected, 
   message, 
-  setMessage 
+  setMessage,
+  onSpeakWithAvatarReady
 }) => {
     const [status, setStatus] = useState<string>('準備中');
     const [error, setError] = useState<string | null>(null);
@@ -89,6 +90,13 @@ const AvatarPlayer: React.FC<AvatarPlayerProps> = ({
             }
         };
     }, []);
+
+    // 自動読み上げ関数を親コンポーネントに登録
+    useEffect(() => {
+        if (onSpeakWithAvatarReady) {
+            onSpeakWithAvatarReady(speakTextAuto);
+        }
+    }, [onSpeakWithAvatarReady, isConnected]);
 
     /**
      * メディアストリームの詳細情報を取得
@@ -444,6 +452,48 @@ const AvatarPlayer: React.FC<AvatarPlayerProps> = ({
             setIsConnected(false);
         }
     };
+    /**
+     * 外部からの自動音声合成用関数
+     */
+    const speakTextAuto = async (textToSpeak: string): Promise<void> => {
+        if (!textToSpeak.trim()) {
+            console.warn('自動読み上げ: 空のテキストです');
+            return;
+        }
+
+        if (!isConnected || !avatarSynthesizerRef.current) {
+            console.warn('自動読み上げ: アバターに接続されていません');
+            setError('アバターに接続されていません');
+            return;
+        }
+
+        try {
+            setIsSpeaking(true);
+            setError(null);
+            addDebugInfo(`自動音声合成開始: "${textToSpeak}"`);
+            
+            // SSML形式で音声合成を実行
+            const ssml = `
+            <speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='${avatarSettings.voiceLanguage}'>
+                <voice name='${avatarSettings.voiceName}'>
+                    ${textToSpeak}
+                </voice>
+            </speak>`;
+
+            // 音声合成を実行
+            avatarSynthesizerRef.current.speakSsmlAsync(ssml);
+            addDebugInfo("自動音声合成リクエスト送信完了");
+
+        } catch (error) {
+            console.error('自動音声合成エラー:', error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            setError(errorMessage);
+            addDebugInfo(`自動音声合成エラー: ${errorMessage}`);
+        } finally {
+            setTimeout(() => setIsSpeaking(false), 100); // わずかに遅延させて状態をリセット
+        }
+    };
+
     /**
      * 音声合成とアバター表示を実行する関数
      */

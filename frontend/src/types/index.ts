@@ -9,6 +9,7 @@ export interface AvatarPlayerProps {
   setIsConnected: (connected: boolean) => void;
   message: string;
   setMessage: (message: string) => void;
+  onSpeakWithAvatarReady?: (speakFunction: (text: string) => Promise<void>) => void;
 }
 
 export interface ICEServerInfo {
