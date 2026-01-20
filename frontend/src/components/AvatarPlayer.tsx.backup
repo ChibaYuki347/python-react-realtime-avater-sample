@@ -643,7 +643,7 @@ const AvatarPlayer: React.FC<AvatarPlayerProps> = ({
                 <div style={{ marginTop: '15px', textAlign: 'center' }}>
                     {!isConnected ? (
                         <button 
-                            onClick={initializeAvatar}
+                            onClick={connectAvatar}
                             style={{
                                 backgroundColor: '#28a745',
                                 color: 'white',
@@ -875,6 +875,124 @@ const AvatarPlayer: React.FC<AvatarPlayerProps> = ({
                         </div>
                     )}
                 </div>
+            </div>
+
+            {/* デバッグ情報エリア */}
+                <video 
+                    ref={videoRef}
+                    className="avatar-video"
+                    controls={false}
+                    autoPlay
+                    playsInline
+                    muted
+                    style={{
+                        width: '100%',
+                        maxWidth: '640px',
+                        height: '360px',
+                        backgroundColor: '#000',
+                        border: '1px solid #ccc',
+                        borderRadius: '8px'
+                    }}
+                />
+                <audio 
+                    ref={audioRef}
+                    autoPlay
+                    style={{ display: 'none' }}
+                />
+            </div>
+
+            {/* 状態表示エリア */}
+            <div className="status-section">
+                <h3>状態: {status}</h3>
+                <p>接続状況: {isConnected ? '✅ 接続済み' : '❌ 未接続'}</p>
+                {connectionRetries > 0 && (
+                    <p>再試行回数: {connectionRetries}/3</p>
+                )}
+                
+                {error && (
+                    <div className="error-message" style={{ 
+                        backgroundColor: '#ffebee', 
+                        color: '#c62828', 
+                        padding: '10px', 
+                        borderRadius: '4px', 
+                        margin: '10px 0' 
+                    }}>
+                        エラー: {error}
+                    </div>
+                )}
+            </div>
+
+            {/* 操作ボタンエリア */}
+            <div className="control-section" style={{ margin: '20px 0' }}>
+                {!isConnected ? (
+                    <button 
+                        onClick={initializeAvatar}
+                        style={{
+                            backgroundColor: '#4CAF50',
+                            color: 'white',
+                            padding: '10px 20px',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '16px'
+                        }}
+                    >
+                        アバターに接続
+                    </button>
+                ) : (
+                    <div>
+                        <div style={{ margin: '10px 0' }}>
+                            <textarea
+                                value={message}
+                                onChange={(e) => setMessage(e.target.value)}
+                                placeholder="話させたいメッセージを入力してください"
+                                style={{
+                                    width: '100%',
+                                    maxWidth: '600px',
+                                    height: '80px',
+                                    padding: '10px',
+                                    border: '1px solid #ccc',
+                                    borderRadius: '4px',
+                                    fontSize: '14px',
+                                    resize: 'vertical'
+                                }}
+                            />
+                        </div>
+                        
+                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                            <button 
+                                onClick={speakText}
+                                disabled={isSpeaking || !message.trim()}
+                                style={{
+                                    backgroundColor: isSpeaking ? '#ccc' : '#2196F3',
+                                    color: 'white',
+                                    padding: '10px 20px',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: isSpeaking ? 'not-allowed' : 'pointer',
+                                    fontSize: '16px'
+                                }}
+                            >
+                                {isSpeaking ? '話しています...' : 'アバターに話させる'}
+                            </button>
+                            
+                            <button 
+                                onClick={disconnectAvatar}
+                                style={{
+                                    backgroundColor: '#f44336',
+                                    color: 'white',
+                                    padding: '10px 20px',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontSize: '16px'
+                                }}
+                            >
+                                接続を切断
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* デバッグ情報エリア */}
