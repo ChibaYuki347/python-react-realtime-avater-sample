@@ -1,24 +1,20 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
-import './ChatInterface.css';
+import React, { useState, useRef } from 'react';
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
-  isStreaming?: boolean;
 }
 
 interface ChatInterfaceProps {
-  onNewMessage?: (message: string, response: string) => void;
-  className?: string;
   speakWithAvatarFunction?: ((text: string) => Promise<void>) | null;
+  onNewMessage?: (userMessage: string, assistantMessage: string) => void;
 }
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({
-  onNewMessage,
-  className = '',
-  speakWithAvatarFunction
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
+  speakWithAvatarFunction = null, 
+  onNewMessage 
 }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -26,58 +22,46 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [sessionId, setSessionId] = useState<string>('');
   const [streamingResponse, setStreamingResponse] = useState('');
   const [lastAIResponse, setLastAIResponse] = useState<string>('');
-  const [useRAG, setUseRAG] = useState<boolean>(false); // RAG使用オプション
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [useRAG, setUseRAG] = useState(false);
+  
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Auto-scroll to bottom when new messages arrive
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, []);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, streamingResponse, scrollToBottom]);
-
-  // Send message to AI
-  const sendMessage = useCallback(async () => {
+  const sendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return;
 
     const userMessage = inputMessage.trim();
-    setInputMessage('');
-    setIsLoading(true);
-    setStreamingResponse('');
-
-    // Add user message to chat
-    const userMessageObj: Message = {
+    
+    // Add user message to messages
+    const newUserMessage: Message = {
       id: `user-${Date.now()}`,
       role: 'user',
       content: userMessage,
       timestamp: new Date().toISOString()
     };
-    
-    setMessages(prev => [...prev, userMessageObj]);
+
+    setMessages(prev => [...prev, newUserMessage]);
+    setInputMessage('');
+    setIsLoading(true);
+    setStreamingResponse('');
+
+    // Create new AbortController for this request
+    abortControllerRef.current = new AbortController();
 
     try {
-      // Create abort controller for this request
-      abortControllerRef.current = new AbortController();
-
-      // RAGまたは通常のAI応答を選択
-      const endpoint = useRAG ? '/api/rag/query' : '/api/ai/chat/stream';
+      // Choose endpoint based on RAG mode
+      const endpoint = useRAG ? '/api/rag/query' : '/api/ai/chat';
+      
+      // Prepare request body
       const requestBody = useRAG 
-        ? {
-            user_id: 'user_001',  // TODO: 実際のユーザーIDに変更
-            query: userMessage,
-            conversation_id: sessionId || undefined,
-            max_results: 5
-          }
-        : {
+        ? { query: userMessage }
+        : { 
             message: userMessage,
-            session_id: sessionId || undefined,
-            max_tokens: 2000,
-            temperature: 0.7
+            session_id: sessionId || null,
+            streaming: true
           };
+
+      console.log('Sending request to:', endpoint);
+      console.log('Request body:', requestBody);
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -114,28 +98,27 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         if (speakWithAvatarFunction && finalResponse.trim()) {
           console.log('RAG自動アバター読み上げ開始:', finalResponse);
           try {
-            speakWithAvatarFunction(finalResponse);
-          } catch (error) {
-            console.error('RAG自動読み上げエラー:', error);
+            await speakWithAvatarFunction(finalResponse);
+          } catch (speakError) {
+            console.error('RAGアバター読み上げエラー:', speakError);
           }
         }
         
+        // Call onNewMessage callback
         if (onNewMessage) {
           onNewMessage(userMessage, finalResponse);
         }
+
         return;
       }
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
 
-      // ストリーミング応答の処理
+      // 通常のストリーミング応答の処理
       const reader = response.body?.getReader();
       if (!reader) {
         throw new Error('No response body reader available');
       }
 
       let fullResponse = '';
-      let currentSessionId = sessionId;
 
       try {
         while (true) {
@@ -144,73 +127,53 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
           // Decode the chunk
           const chunk = new TextDecoder().decode(value);
-          console.log('Raw chunk received:', chunk); // デバッグログ
-          const lines = chunk.split('\n');
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const jsonString = line.slice(6);
-                console.log('Raw JSON string:', jsonString); // デバッグログ
-                const data = JSON.parse(jsonString);
-                console.log('Parsed data:', data); // デバッグログ
-                
-                // バックエンドからのエラー応答をチェック
-                if (data.error) {
-                  throw new Error(data.error);
+          console.log('Raw chunk received:', chunk);
+          
+          try {
+            // 直接JSONオブジェクトとして処理
+            const data = JSON.parse(chunk.trim());
+            console.log('Parsed data:', data);
+            
+            // バックエンドの形式に応じて処理
+            if (data.response) {
+              // 単一の完全な応答
+              fullResponse = data.response;
+              
+              const assistantMessage: Message = {
+                id: `assistant-${Date.now()}`,
+                role: 'assistant',
+                content: fullResponse,
+                timestamp: new Date().toISOString()
+              };
+              
+              setMessages(prev => [...prev, assistantMessage]);
+              setLastAIResponse(fullResponse);
+              setStreamingResponse('');
+              setSessionId(data.session_id || sessionId);
+              
+              // 自動読み上げ判定
+              const hasContent = fullResponse && fullResponse.trim().length > 0;
+              const hasSpeakFunction = speakWithAvatarFunction !== null && speakWithAvatarFunction !== undefined;
+              console.log('自動読み上げチェック:', { hasSpeakFunction, hasContent });
+              
+              if (hasSpeakFunction && hasContent) {
+                console.log('自動アバター読み上げ開始:', fullResponse);
+                try {
+                  await speakWithAvatarFunction(fullResponse);
+                } catch (speakError) {
+                  console.error('アバター読み上げエラー:', speakError);
                 }
-                
-                if (data.type === 'content') {
-                  console.log('Adding content:', data.content);
-                  fullResponse += data.content;
-                  setStreamingResponse(fullResponse);
-                  console.log('Current fullResponse:', fullResponse);
-                } else if (data.type === 'complete') {
-                  // ストリーミング完了 - full_responseを使用
-                  const finalResponse = data.full_response || fullResponse;
-                  console.log('Streaming complete, final response:', finalResponse);
-                  
-                  const assistantMessage: Message = {
-                    id: `assistant-${Date.now()}`,
-                    role: 'assistant',
-                    content: finalResponse,
-                    timestamp: new Date().toISOString()
-                  };
-                  
-                  setMessages(prev => [...prev, assistantMessage]);
-                  setStreamingResponse('');
-                  setLastAIResponse(finalResponse);  // 最後のAI応答を保存
-                  
-                  // 自動でアバターに読み上げさせる
-                  if (speakWithAvatarFunction && finalResponse.trim()) {
-                    console.log('自動アバター読み上げ開始:', finalResponse);
-                    try {
-                      speakWithAvatarFunction(finalResponse);
-                    } catch (error) {
-                      console.error('自動読み上げエラー:', error);
-                    }
-                  } else {
-                    console.log('自動読み上げスキップ:', {
-                      hasSpeakFunction: !!speakWithAvatarFunction,
-                      hasContent: !!finalResponse.trim()
-                    });
-                  }
-                  
-                  // Call onNewMessage callback if provided
-                  if (onNewMessage) {
-                    onNewMessage(userMessage, finalResponse);
-                  }
-                  break;
-                } else if (data.type === 'session' && data.session_id) {
-                  currentSessionId = data.session_id;
-                  setSessionId(currentSessionId);
-                } else if (data.type === 'error') {
-                  throw new Error(data.message);
-                }
-              } catch (parseError) {
-                console.warn('Failed to parse streaming data:', parseError);
               }
+              
+              // Call onNewMessage callback
+              if (onNewMessage) {
+                onNewMessage(userMessage, fullResponse);
+              }
+              
+              break; // 応答完了
             }
+          } catch (parseError) {
+            console.warn('Failed to parse chunk as JSON:', parseError, 'Chunk:', chunk);
           }
         }
       } finally {
@@ -222,170 +185,195 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         console.log('Request aborted');
       } else {
         console.error('Error sending message:', error);
-        
-        // Add error message to chat
+        // Show error message to user
         const errorMessage: Message = {
           id: `error-${Date.now()}`,
           role: 'assistant',
-          content: `申し訳ありません。エラーが発生しました: ${error.message}`,
+          content: `エラーが発生しました: ${error.message}`,
           timestamp: new Date().toISOString()
         };
-        
         setMessages(prev => [...prev, errorMessage]);
       }
-      setStreamingResponse('');
     } finally {
       setIsLoading(false);
+      setStreamingResponse('');
       abortControllerRef.current = null;
-      // フォーカスを戻さず、アバター領域にユーザーの注意を向ける
-      if (inputRef.current) {
-        inputRef.current.blur();
-      }
     }
-  }, [inputMessage, isLoading, sessionId, onNewMessage, speakWithAvatarFunction, useRAG]);
+  };
 
-  // Handle Enter key press
-  const handleKeyPress = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  }, [sendMessage]);
-
-  // Stop streaming
-  const stopStreaming = useCallback(() => {
+  const stopGeneration = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
+      setIsLoading(false);
+      setStreamingResponse('');
     }
-  }, []);
+  };
 
-  // Clear conversation
-  const clearConversation = useCallback(() => {
-    setMessages([]);
-    setSessionId('');
-    setStreamingResponse('');
-    setLastAIResponse('');
-  }, []);
-
-  // Send last AI response to avatar
-  const handleSpeakWithAvatar = useCallback(() => {
-    if (lastAIResponse && speakWithAvatarFunction) {
-      speakWithAvatarFunction(lastAIResponse);
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !isLoading) {
+      sendMessage();
     }
-  }, [lastAIResponse, speakWithAvatarFunction]);
-
-  // Format timestamp
-  const formatTimestamp = useCallback((timestamp: string) => {
-    return new Date(timestamp).toLocaleTimeString('ja-JP', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  }, []);
+  };
 
   return (
-    <div className={`chat-interface ${className}`}>
-      <div className="chat-header">
-        <h3>AI アシスタント {useRAG ? '(RAG + GPT-4.1)' : '(Azure OpenAI GPT-4.1)'}</h3>
-        <div className="chat-controls">
-          {/* RAGオプション選択 */}
-          <div className="rag-toggle">
-            <label className="rag-switch">
-              <input 
-                type="checkbox" 
-                checked={useRAG} 
-                onChange={(e) => setUseRAG(e.target.checked)}
-                disabled={isLoading}
-              />
-              <span className="rag-slider"></span>
-              <span className="rag-label">RAG検索</span>
-            </label>
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#f5f5f5' }}>
+      {/* ヘッダー */}
+      <div style={{ 
+        padding: '1rem', 
+        backgroundColor: 'white', 
+        borderBottom: '1px solid #e0e0e0',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between'
+      }}>
+        <h2 style={{ margin: 0, color: '#333' }}>AI Chat</h2>
+        
+        {/* RAG設定 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.9rem', color: '#333', fontWeight: '500' }}>
+            <input
+              type="checkbox"
+              checked={useRAG}
+              onChange={(e) => setUseRAG(e.target.checked)}
+              style={{ marginRight: '0.5rem' }}
+            />
+            RAG機能を使用
+          </label>
+        </div>
+      </div>
+
+      {/* メインチャットエリア */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* チャット表示エリア */}
+        <div style={{ 
+          flex: 1, 
+          overflowY: 'auto', 
+          padding: '1rem',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '1rem'
+        }}>
+          {messages.map((message) => (
+            <div key={message.id} style={{
+              display: 'flex',
+              justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start'
+            }}>
+              <div style={{
+                maxWidth: '70%',
+                padding: '0.75rem 1rem',
+                borderRadius: '0.5rem',
+                backgroundColor: message.role === 'user' ? '#007bff' : 'white',
+                color: message.role === 'user' ? 'white' : '#333',
+                border: message.role === 'user' ? 'none' : '1px solid #e0e0e0',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+              }}>
+                <div style={{ whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}>
+                  {message.content}
+                </div>
+                <div style={{
+                  fontSize: '0.75rem',
+                  marginTop: '0.25rem',
+                  opacity: 0.7
+                }}>
+                  {new Date(message.timestamp).toLocaleTimeString()}
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {/* ストリーミング中の応答表示 */}
+          {streamingResponse && (
+            <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+              <div style={{
+                maxWidth: '70%',
+                padding: '0.75rem 1rem',
+                borderRadius: '0.5rem',
+                backgroundColor: '#f8f9fa',
+                color: '#333',
+                border: '1px solid #e0e0e0',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+              }}>
+                <div style={{ whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}>
+                  {streamingResponse}
+                </div>
+                <div style={{
+                  fontSize: '0.8rem',
+                  color: '#007bff',
+                  marginTop: '0.25rem'
+                }}>
+                  入力中...
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 入力エリア */}
+        <div style={{
+          borderTop: '1px solid #e0e0e0',
+          backgroundColor: 'white',
+          padding: '1rem',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.5rem'
+        }}>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <input
+              type="text"
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder={useRAG ? "RAG機能でドキュメントを検索して応答します..." : "メッセージを入力してください..."}
+              style={{
+                flex: 1,
+                padding: '0.75rem',
+                border: '1px solid #ddd',
+                borderRadius: '0.5rem',
+                fontSize: '1rem',
+                outline: 'none'
+              }}
+              disabled={isLoading}
+            />
+            {isLoading ? (
+              <button
+                onClick={stopGeneration}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: '#dc3545',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '0.5rem',
+                  cursor: 'pointer'
+                }}
+              >
+                停止
+              </button>
+            ) : (
+              <button
+                onClick={sendMessage}
+                disabled={!inputMessage.trim()}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: inputMessage.trim() ? '#007bff' : '#ccc',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '0.5rem',
+                  cursor: inputMessage.trim() ? 'pointer' : 'not-allowed'
+                }}
+              >
+                送信
+              </button>
+            )}
           </div>
           
-          {sessionId && (
-            <span className="session-info">Session: {sessionId.slice(-8)}</span>
-          )}
-          <button 
-            onClick={handleSpeakWithAvatar}
-            className="avatar-btn"
-            disabled={!lastAIResponse || isLoading}
-            title="最後のAI応答をアバターで再生"
-          >
-            🗣️ アバター再生
-          </button>
-          <button 
-            onClick={clearConversation}
-            className="clear-btn"
-            disabled={isLoading}
-          >
-            クリア
-          </button>
-        </div>
-      </div>
-
-      <div className="chat-messages">
-        {messages.map((message) => (
-          <div key={message.id} className={`message ${message.role}`}>
-            <div className="message-content">
-              <div className="message-text">
-                {message.content}
-              </div>
-              <div className="message-timestamp">
-                {formatTimestamp(message.timestamp)}
-              </div>
-            </div>
+          {/* 設定情報表示 */}
+          <div style={{ fontSize: '0.8rem', color: '#333', fontWeight: '500' }}>
+            モード: {useRAG ? 'RAG' : 'AI'} | 状態: {isLoading ? '処理中' : '待機中'}
           </div>
-        ))}
-        
-        {/* Streaming response */}
-        {streamingResponse && (
-          <div className="message assistant streaming">
-            <div className="message-content">
-              <div className="message-text">
-                {streamingResponse}
-                <span className="cursor">▊</span>
-              </div>
-              <button 
-                onClick={stopStreaming}
-                className="stop-streaming-btn"
-                title="応答を停止"
-              >
-                ⏹
-              </button>
-            </div>
-          </div>
-        )}
-        
-        <div ref={messagesEndRef} />
-      </div>
-
-      <div className="chat-input">
-        <div className="input-container">
-          <textarea
-            ref={inputRef}
-            value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="メッセージを入力してください... (Enter で送信、Shift+Enter で改行)"
-            disabled={isLoading}
-            rows={1}
-            className="message-input"
-          />
-          <button
-            onClick={sendMessage}
-            disabled={!inputMessage.trim() || isLoading}
-            className="send-btn"
-          >
-            {isLoading ? '...' : '送信'}
-          </button>
         </div>
       </div>
-
-      {messages.length === 0 && (
-        <div className="chat-welcome">
-          <p>GPT-4.1搭載のAIアシスタントです。</p>
-          <p>質問や相談を日本語でお気軽にどうぞ！</p>
-        </div>
-      )}
     </div>
   );
 };
+
+export default ChatInterface;

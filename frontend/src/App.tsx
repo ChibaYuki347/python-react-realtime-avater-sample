@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import AvatarPlayer from './components/AvatarPlayer';
-import { ChatInterface } from './components/ChatInterface';
+import ChatInterface from './components/ChatInterface';
 import './index.css';
 
 const App: React.FC = () => {
@@ -77,7 +77,6 @@ const App: React.FC = () => {
               <h3>AI アシスタント (GPT-4.1)</h3>
               <ChatInterface 
                 onNewMessage={handleAIResponse}
-                className="ai-chat-interface"
                 speakWithAvatarFunction={speakWithAvatarFunction}
               />
               <p className="ai-description">
