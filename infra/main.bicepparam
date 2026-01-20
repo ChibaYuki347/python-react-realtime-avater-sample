@@ -7,7 +7,7 @@ using './main.bicep'
 param projectName = 'ai-avatar'
 param environment = 'staging'
 param location = 'eastus'
-param deploymentPhase = 2
+param deploymentPhase = 1
 
 param openAIConfig = {
   deployments: [

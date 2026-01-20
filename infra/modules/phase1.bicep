@@ -65,7 +65,7 @@ resource openAIService 'Microsoft.CognitiveServices/accounts@2023-05-01' = {
 // Azure OpenAI デプロイメント（GPT-4.1）
 // ====================================================================================================
 
-resource gpt4oDeployment 'Microsoft.CognitiveServices/accounts/deployments@2023-05-01' = {
+resource gpt41Deployment 'Microsoft.CognitiveServices/accounts/deployments@2023-05-01' = {
   name: openAIConfig.deployments[0].name
   parent: openAIService
   properties: {
@@ -89,7 +89,7 @@ resource gpt4oDeployment 'Microsoft.CognitiveServices/accounts/deployments@2023-
 resource embeddingDeployment 'Microsoft.CognitiveServices/accounts/deployments@2023-05-01' = {
   name: openAIConfig.deployments[1].name
   parent: openAIService
-  dependsOn: [gpt4oDeployment] // 順次デプロイ
+  dependsOn: [gpt41Deployment] // 順次デプロイ
   properties: {
     model: {
       format: 'OpenAI'
@@ -220,7 +220,7 @@ output openAIEndpoint string = openAIService.properties.endpoint
 output openAIServiceId string = openAIService.id
 
 @description('GPT-4.1 デプロイメント名')
-output gpt4oDeploymentName string = gpt4oDeployment.name
+output gpt4oDeploymentName string = gpt41Deployment.name
 
 @description('Embedding デプロイメント名')
 output embeddingDeploymentName string = embeddingDeployment.name
