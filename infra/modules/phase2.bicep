@@ -14,6 +14,17 @@ param tags object
 @description('Log Analytics ワークスペースのリソースID')
 param logAnalyticsWorkspaceId string
 
+@description('Phase 1でデプロイされた既存のOpenAIサービス名')
+param existingOpenAIServiceName string
+
+// ====================================================================================================
+// 既存のOpenAIサービス参照
+// ====================================================================================================
+
+resource existingOpenAIService 'Microsoft.CognitiveServices/accounts@2023-05-01' existing = {
+  name: existingOpenAIServiceName
+}
+
 // ====================================================================================================
 // Azure AI Search Service（セマンティック検索・RAG機能）
 // ====================================================================================================
@@ -54,7 +65,7 @@ resource searchService 'Microsoft.Search/searchServices@2024-06-01-preview' = {
 
 resource cosmosDbAccount 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
   name: '${resourcePrefix}-cosmosdb'
-  location: location
+  location: 'westus3'
   tags: tags
   kind: 'GlobalDocumentDB'
   properties: {
@@ -63,7 +74,7 @@ resource cosmosDbAccount 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
     }
     locations: [
       {
-        locationName: location
+        locationName: 'westus3'
         failoverPriority: 0
         isZoneRedundant: false
       }
@@ -128,11 +139,7 @@ resource conversationContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabas
             path: '/*'
           }
         ]
-        excludedPaths: [
-          {
-            path: '/messages/*/audioData/?'
-          }
-        ]
+        excludedPaths: []
       }
       uniqueKeyPolicy: {
         uniqueKeys: []
@@ -236,20 +243,12 @@ resource searchServiceDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05
       {
         category: 'OperationLogs'
         enabled: true
-        retentionPolicy: {
-          enabled: true
-          days: 30
-        }
       }
     ]
     metrics: [
       {
         category: 'AllMetrics'
         enabled: true
-        retentionPolicy: {
-          enabled: true
-          days: 30
-        }
       }
     ]
   }
@@ -268,36 +267,20 @@ resource cosmosDbDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-p
       {
         category: 'DataPlaneRequests'
         enabled: true
-        retentionPolicy: {
-          enabled: true
-          days: 30
-        }
       }
       {
         category: 'QueryRuntimeStatistics'
         enabled: true
-        retentionPolicy: {
-          enabled: true
-          days: 30
-        }
       }
       {
         category: 'PartitionKeyStatistics'
         enabled: true
-        retentionPolicy: {
-          enabled: true
-          days: 30
-        }
       }
     ]
     metrics: [
       {
         category: 'Requests'
         enabled: true
-        retentionPolicy: {
-          enabled: true
-          days: 30
-        }
       }
     ]
   }

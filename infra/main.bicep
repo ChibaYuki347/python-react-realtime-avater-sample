@@ -25,8 +25,8 @@ param deploymentPhase int = 1
 param openAIConfig object = {
   deployments: [
     {
-      name: 'gpt-4o'
-      model: 'gpt-4o'
+      name: 'gpt-4.1'
+      model: 'gpt-4.1'
       version: '2024-08-06'
       capacity: 30
     }
@@ -78,10 +78,10 @@ module commonResources 'modules/common.bicep' = {
 }
 
 // ====================================================================================================
-// フェーズ1: 基本機能 + 生成AI
+// フェーズ1: 基本機能 + 生成AI（既存リソースが存在しない場合のみ）
 // ====================================================================================================
 
-module phase1Resources 'modules/phase1.bicep' = {
+module phase1Resources 'modules/phase1.bicep' = if (deploymentPhase == 1) {
   scope: resourceGroup
   params: {
     resourcePrefix: resourcePrefix
@@ -103,6 +103,8 @@ module phase2Resources 'modules/phase2.bicep' = if (deploymentPhase >= 2) {
     location: location
     tags: tags
     logAnalyticsWorkspaceId: commonResources.outputs.logAnalyticsWorkspaceId
+    // Phase 1のOpenAIサービス名を参照
+    existingOpenAIServiceName: '${resourcePrefix}-openai'
   }
 }
 
@@ -146,9 +148,9 @@ output endpoints object = {
   // 共通リソース
   keyVaultUri: commonResources.outputs.keyVaultUri
   
-  // フェーズ1リソース
-  speechServiceEndpoint: phase1Resources.outputs.speechServiceEndpoint
-  openAIEndpoint: phase1Resources.outputs.openAIEndpoint
+  // フェーズ1リソース（条件付き）
+  speechServiceEndpoint: deploymentPhase == 1 ? phase1Resources.outputs.speechServiceEndpoint : 'https://ai-avatar-staging-speech.cognitiveservices.azure.com/'
+  openAIEndpoint: deploymentPhase == 1 ? phase1Resources.outputs.openAIEndpoint : 'https://ai-avatar-staging-openai.openai.azure.com/'
   
   // フェーズ2リソース（条件付き）
   searchServiceEndpoint: deploymentPhase >= 2 ? phase2Resources!.outputs.searchServiceEndpoint : ''
