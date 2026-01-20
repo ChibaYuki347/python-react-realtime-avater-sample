@@ -1,20 +1,55 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import AvatarPlayer from './components/AvatarPlayer';
+import { ChatInterface } from './components/ChatInterface';
 import './index.css';
 
 const App: React.FC = () => {
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [message, setMessage] = useState<string>('');
+  const [isAIMode, setIsAIMode] = useState<boolean>(true);
+
+  // Handle AI chat response - make avatar speak the AI response
+  const handleAIResponse = useCallback((userMessage: string, aiResponse: string) => {
+    console.log('AI Response received:', { userMessage, aiResponse });
+    
+    // アバターで自動再生するかユーザーの選択に任せるか
+    // 現在は手動ボタンでの再生に変更
+    if (aiResponse && aiResponse.trim()) {
+      console.log('Setting message for avatar:', aiResponse.trim());
+      // Set the AI response as the message for avatar to speak
+      setMessage(aiResponse.trim());
+    }
+  }, []);
+
+  // Handle manual text input for avatar
+  const handleManualInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setMessage(e.target.value);
+  }, []);
 
   return (
     <div className="app">
       <div className="header">
-        <h1>リアルタイムカスタムアバターアプリ</h1>
-        <p>Azure Speech SDKを使用したリアルタイム音声合成とアバター表示</p>
+        <h1>AI強化リアルタイムアバターシステム</h1>
+        <p>GPT-4.1 + Azure Speech SDK による次世代対話型アバター体験</p>
+        
+        <div className="mode-toggle">
+          <button 
+            className={`mode-btn ${isAIMode ? 'active' : ''}`}
+            onClick={() => setIsAIMode(true)}
+          >
+            🤖 AI会話モード
+          </button>
+          <button 
+            className={`mode-btn ${!isAIMode ? 'active' : ''}`}
+            onClick={() => setIsAIMode(false)}
+          >
+            ✏️ 手動入力モード
+          </button>
+        </div>
       </div>
 
-      <main>
-        <div className="avatar-container">
+      <main className="main-content">
+        <div className="avatar-section">
           <h2>アバター表示エリア</h2>
           <AvatarPlayer 
             isConnected={isConnected}
@@ -22,24 +57,78 @@ const App: React.FC = () => {
             message={message}
             setMessage={setMessage}
           />
+          
+          <div className="avatar-status">
+            <span className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}>
+              {isConnected ? '🟢 接続済み' : '🔴 未接続'}
+            </span>
+          </div>
         </div>
 
-        <div className="controls">
-          <h3>コントロール</h3>
-          <div>
-            <input
-              type="text"
-              className="text-input"
-              placeholder="アバターに話させたいテキストを入力してください"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-            />
-          </div>
+        <div className="interaction-section">
+          {isAIMode ? (
+            <div className="ai-chat-section">
+              <h3>AI アシスタント (GPT-4.1)</h3>
+              <ChatInterface 
+                onNewMessage={handleAIResponse}
+                className="ai-chat-interface"
+              />
+              <p className="ai-description">
+                AIとの会話内容が自動的にアバターで音声合成されます
+              </p>
+            </div>
+          ) : (
+            <div className="manual-input-section">
+              <h3>手動テキスト入力</h3>
+              <div className="manual-controls">
+                <input
+                  type="text"
+                  className="text-input"
+                  placeholder="アバターに話させたいテキストを入力してください"
+                  value={message}
+                  onChange={handleManualInput}
+                />
+                <p className="manual-description">
+                  入力したテキストがアバターで音声合成されます
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </main>
 
-      <footer style={{ marginTop: '40px', padding: '20px', borderTop: '1px solid #ddd' }}>
-        <p>PythonとReactを活用したリアルタイムカスタムアバターアプリサンプル</p>
+      <footer className="app-footer">
+        <div className="footer-content">
+          <div className="footer-section">
+            <h4>技術スタック</h4>
+            <ul>
+              <li>GPT-4.1 (Azure OpenAI Service)</li>
+              <li>Azure Speech Service</li>
+              <li>React + TypeScript</li>
+              <li>FastAPI + Python</li>
+            </ul>
+          </div>
+          <div className="footer-section">
+            <h4>フェーズ1機能</h4>
+            <ul>
+              <li>リアルタイムAI応答生成</li>
+              <li>音声アバター合成</li>
+              <li>会話履歴管理</li>
+              <li>ストリーミングレスポンス</li>
+            </ul>
+          </div>
+          <div className="footer-section">
+            <h4>今後の実装予定</h4>
+            <ul>
+              <li>RAG検索機能 (フェーズ2)</li>
+              <li>音声入力対応 (フェーズ3)</li>
+              <li>完全対話ループ (フェーズ4)</li>
+            </ul>
+          </div>
+        </div>
+        <p className="copyright">
+          PythonとReactを活用したAI強化リアルタイムアバターシステム - Phase 1
+        </p>
       </footer>
     </div>
   );

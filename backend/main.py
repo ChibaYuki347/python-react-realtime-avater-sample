@@ -7,10 +7,17 @@ import httpx
 from dotenv import load_dotenv
 import logging
 
+# Import new AI routes
+from routes.ai_routes import router as ai_router
+
 # 環境変数を読み込み
 load_dotenv()
 
-app = FastAPI(title="リアルタイムアバターAPI", version="1.0.0")
+app = FastAPI(
+    title="AI強化リアルタイムアバターAPI", 
+    version="2.0.0",
+    description="GPT-4.1統合によるAI応答機能付きリアルタイムアバターシステム"
+)
 
 # CORS設定
 app.add_middleware(
@@ -24,6 +31,14 @@ app.add_middleware(
 # ログ設定
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# AI routes registration
+app.include_router(ai_router, prefix="/api")
+
+# Azure configuration from environment (fallback for local development)
+KEY_VAULT_URL = os.getenv("KEY_VAULT_URL", "https://ai-avatar-staging-kv.vault.azure.net/")
+OPENAI_ENDPOINT = os.getenv("OPENAI_ENDPOINT", "https://ai-avatar-staging-openai.openai.azure.com/")
+SPEECH_SERVICE_REGION = os.getenv("SPEECH_SERVICE_REGION", "eastus")
 
 # カスタム音声・アバター設定
 DEFAULT_VOICE_NAME = os.getenv("DEFAULT_VOICE_NAME", "ja-JP-NanamiNeural")
@@ -47,7 +62,22 @@ except json.JSONDecodeError:
 
 @app.get("/")
 async def root():
-    return {"message": "リアルタイムアバターAPI が正常に動作しています"}
+    return {
+        "message": "AI強化リアルタイムアバターAPI が正常に動作しています",
+        "version": "2.0.0",
+        "features": [
+            "GPT-4.1 AI応答生成",
+            "リアルタイムアバター合成",
+            "会話履歴管理",
+            "Azure統合"
+        ],
+        "endpoints": {
+            "ai_chat": "/ai/chat",
+            "ai_stream": "/ai/chat/stream",
+            "conversations": "/ai/conversations",
+            "health": "/ai/health"
+        }
+    }
 
 @app.get("/api/config")
 async def get_config():

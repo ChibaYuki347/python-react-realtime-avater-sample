@@ -1,0 +1,1 @@
+# Services module for AI-enhanced avatar backend

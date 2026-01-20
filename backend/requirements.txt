@@ -4,3 +4,10 @@ python-dotenv==1.0.0
 httpx==0.25.2
 python-multipart==0.0.6
 pydantic==2.5.0
+# Azure SDK for AI services
+openai==1.52.0
+azure-identity==1.19.0
+azure-keyvault-secrets==4.8.0
+azure-cognitiveservices-speech==1.40.0
+# Additional utilities
+aiofiles==23.2.1
