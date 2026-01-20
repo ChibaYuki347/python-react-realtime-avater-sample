@@ -80,7 +80,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      // Handle streaming response
+      // ストリーミング応答の処理
       const reader = response.body?.getReader();
       if (!reader) {
         throw new Error('No response body reader available');
@@ -237,7 +237,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   return (
     <div className={`chat-interface ${className}`}>
       <div className="chat-header">
-        <h3>AI アシスタント (GPT-4.1)</h3>
+        <h3>AI アシスタント (Azure OpenAI GPT-4.1)</h3>
         <div className="chat-controls">
           {sessionId && (
             <span className="session-info">Session: {sessionId.slice(-8)}</span>

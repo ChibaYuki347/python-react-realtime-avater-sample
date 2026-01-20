@@ -40,9 +40,11 @@ class ChatRequest(BaseModel):
 
 
 class ChatResponse(BaseModel):
+    model_config = {"protected_namespaces": ()}
+    
     response: str
     session_id: str
-    model_used: str
+    ai_model: str
     tokens_used: Optional[int] = None
     response_time: Optional[float] = None
 
@@ -109,7 +111,7 @@ async def chat_with_ai(request: ChatRequest, background_tasks: BackgroundTasks):
         
         # Add assistant response to conversation
         session.add_message("assistant", ai_response.content, {
-            "model_used": ai_response.model_used,
+            "ai_model": ai_response.ai_model,
             "tokens_used": ai_response.tokens_used,
             "response_time": ai_response.response_time
         })
@@ -120,7 +122,7 @@ async def chat_with_ai(request: ChatRequest, background_tasks: BackgroundTasks):
         return ChatResponse(
             response=ai_response.content,
             session_id=session.session_id,
-            model_used=ai_response.model_used,
+            ai_model=ai_response.ai_model,
             tokens_used=ai_response.tokens_used,
             response_time=ai_response.response_time
         )
@@ -160,9 +162,12 @@ async def stream_chat_with_ai(request: ChatRequest):
             full_response = ""
             try:
                 # Send session info first
+                logger.info(f"Starting streaming response for message: {request.message}")
                 yield f"data: {json.dumps({'type': 'session', 'session_id': session.session_id})}\n\n"
                 
                 # Stream AI response
+                logger.info("Starting AI service streaming...")
+                chunk_count = 0
                 async for chunk in ai_service.generate_streaming_response(
                     user_message=request.message,
                     conversation_history=chat_history[:-1],
@@ -170,6 +175,9 @@ async def stream_chat_with_ai(request: ChatRequest):
                     max_tokens=request.max_tokens,
                     temperature=request.temperature
                 ):
+                    chunk_count += 1
+                    logger.debug(f"Received chunk {chunk_count}: {chunk[:100]}...")
+                    
                     # Extract content from the streaming chunk
                     if chunk.startswith("data: "):
                         try:
@@ -178,15 +186,22 @@ async def stream_chat_with_ai(request: ChatRequest):
                             if json_str:
                                 chunk_data = json.loads(json_str)
                                 if 'content' in chunk_data:
-                                    full_response += chunk_data['content']
-                                    yield f"data: {json.dumps({'type': 'content', 'content': chunk_data['content']})}\n\n"
+                                    content = chunk_data['content']
+                                    full_response += content
+                                    logger.debug(f"Content chunk: {content}")
+                                    yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
                                 elif chunk_data.get('done'):
+                                    logger.info("Received done signal from AI service")
                                     # Don't add done signal to full_response
                                     pass
                         except json.JSONDecodeError:
                             # Fallback: treat as plain text
+                            logger.warning(f"Failed to parse JSON, treating as text: {chunk}")
                             full_response += chunk
                             yield f"data: {json.dumps({'type': 'content', 'content': chunk})}\n\n"
+                
+                logger.info(f"Streaming complete. Full response length: {len(full_response)}")
+                logger.debug(f"Full response: {full_response}")
                 
                 # Add complete response to conversation
                 session.add_message("assistant", full_response)
@@ -196,6 +211,10 @@ async def stream_chat_with_ai(request: ChatRequest):
                 
             except Exception as e:
                 logger.error(f"Error in streaming response: {str(e)}")
+                logger.error(f"Exception type: {type(e).__name__}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
                 yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
         
         return StreamingResponse(

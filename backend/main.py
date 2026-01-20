@@ -15,8 +15,8 @@ load_dotenv()
 
 app = FastAPI(
     title="AI強化リアルタイムアバターAPI", 
-    version="2.0.0",
-    description="GPT-4.1統合によるAI応答機能付きリアルタイムアバターシステム"
+    version="1.0.0",
+    description="Azure OpenAI GPT-4.1統合によるAI応答機能付きリアルタイムアバターシステム"
 )
 
 # CORS設定

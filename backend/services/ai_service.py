@@ -21,8 +21,10 @@ class ChatMessage(BaseModel):
 
 class AIResponse(BaseModel):
     """AI response model"""
+    model_config = {"protected_namespaces": ()}
+    
     content: str
-    model_used: str
+    ai_model: str
     tokens_used: Optional[int] = None
     response_time: Optional[float] = None
     conversation_id: Optional[str] = None
@@ -43,18 +45,22 @@ class AIService:
         self.endpoint = config.get("openai_endpoint")
         self.api_version = config.get("openai_api_version", "2024-10-21")
         self.deployment_name = config.get("openai_deployment_name", "gpt-4-1")
-        self.use_mock = config.get("use_mock_ai", False)
+        # Check if we should use Managed Identity
+        use_managed_identity = config.get("use_managed_identity", False)
+        
+        # Use mock mode only if explicitly requested, not when using Managed Identity
+        self.use_mock = config.get("use_mock_ai", False) and not use_managed_identity
         
         if self.use_mock:
-            logger.info("AI Service initialized in MOCK mode for development")
+            logger.warning("AI Service initialized in MOCK mode for development")
             self.client = None
             return
         
         if not self.endpoint:
             raise ValueError("OpenAI endpoint is required")
         
-        # Use Azure AD authentication if no API key provided (development mode)
-        if self.api_key:
+        # Use Managed Identity authentication if configured or no API key provided
+        if self.api_key and not use_managed_identity:
             # Use API key authentication
             self.client = AsyncAzureOpenAI(
                 api_key=self.api_key,
@@ -63,20 +69,25 @@ class AIService:
             )
             logger.info("Initialized AI Service with API key authentication")
         else:
-            # Use Azure AD authentication (DefaultAzureCredential)
-            from azure.identity.aio import DefaultAzureCredential as AsyncDefaultAzureCredential
-            
-            async def get_token():
+            # Use Azure AD/Managed Identity authentication
+            try:
+                from azure.identity.aio import DefaultAzureCredential as AsyncDefaultAzureCredential
+                
                 credential = AsyncDefaultAzureCredential()
-                token = await credential.get_token("https://cognitiveservices.azure.com/.default")
-                return token.token
-            
-            self.client = AsyncAzureOpenAI(
-                azure_ad_token_provider=get_token,
-                api_version=self.api_version,
-                azure_endpoint=self.endpoint
-            )
-            logger.info("Initialized AI Service with Azure AD authentication")
+                
+                async def get_token():
+                    token = await credential.get_token("https://cognitiveservices.azure.com/.default")
+                    return token.token
+                
+                self.client = AsyncAzureOpenAI(
+                    azure_ad_token_provider=get_token,
+                    api_version=self.api_version,
+                    azure_endpoint=self.endpoint
+                )
+                logger.info("Initialized AI Service with Azure Managed Identity authentication")
+            except Exception as e:
+                logger.error(f"Failed to initialize Azure AD authentication: {str(e)}")
+                raise
         
         logger.info(f"AI Service configured with GPT-4.1 deployment: {self.deployment_name}")
     
@@ -121,7 +132,7 @@ class AIService:
                 
                 return AIResponse(
                     content=response_content,
-                    model_used="mock-gpt-4.1",
+                    ai_model="mock-gpt-4.1",
                     tokens_used=len(response_content),
                     response_time=time.time() - start_time,
                     conversation_id=None
@@ -179,7 +190,7 @@ class AIService:
             
             return AIResponse(
                 content=ai_content,
-                model_used=self.deployment_name,
+                ai_model=self.deployment_name,
                 tokens_used=tokens_used,
                 response_time=response_time
             )
@@ -223,6 +234,9 @@ class AIService:
                 
                 yield f"data: {json.dumps({'done': True}, ensure_ascii=False)}\n\n"
                 return
+
+            logger.info(f"Starting AI streaming response for message: '{user_message}'")
+            logger.info(f"Client initialized: {self.client is not None}")
             
             # Build messages array (same as generate_response)
             messages = []
@@ -248,24 +262,52 @@ class AIService:
                 "role": "user",
                 "content": user_message
             })
-            
+
             # Call GPT-4.1 with streaming
-            stream = await self.client.chat.completions.create(
-                model=self.deployment_name,
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                stream=True
-            )
+            logger.info(f"Calling Azure OpenAI with deployment: {self.deployment_name}")
+            logger.info(f"Endpoint: {self.endpoint}")
+            logger.info(f"Messages count: {len(messages)}")
+            logger.info(f"Using Managed Identity authentication: {self.client is not None}")
+            
+            try:
+                stream = await self.client.chat.completions.create(
+                    model=self.deployment_name,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    stream=True
+                )
+                logger.info("Stream created successfully, processing chunks...")
+            except Exception as api_error:
+                logger.error(f"Failed to create stream from Azure OpenAI: {str(api_error)}")
+                logger.error(f"Error type: {type(api_error).__name__}")
+                # Return error as streaming response
+                yield f"data: {json.dumps({'error': f'Azure OpenAI API エラー: {str(api_error)}'}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'done': True}, ensure_ascii=False)}\n\n"
+                return
+                
+            chunk_count = 0
+            content_received = False
             
             async for chunk in stream:
+                chunk_count += 1
+                logger.debug(f"Processing chunk {chunk_count}: {chunk}")
+                
                 # 安全にchunkの内容をチェック
                 if hasattr(chunk, 'choices') and len(chunk.choices) > 0:
                     choice = chunk.choices[0]
                     if hasattr(choice, 'delta') and hasattr(choice.delta, 'content'):
                         content = choice.delta.content
                         if content is not None:
+                            logger.info(f"Content found: '{content}'")
+                            content_received = True
                             yield f"data: {json.dumps({'content': content}, ensure_ascii=False)}\n\n"
+            
+            logger.info(f"Streaming completed with {chunk_count} chunks, content_received: {content_received}")
+            
+            if not content_received:
+                logger.warning("No content was received from Azure OpenAI")
+                yield f"data: {json.dumps({'error': 'Azure OpenAIからのレスポンスが空でした'}, ensure_ascii=False)}\n\n"
             
             # ストリーミング完了を通知
             yield f"data: {json.dumps({'done': True}, ensure_ascii=False)}\n\n"
@@ -276,13 +318,6 @@ class AIService:
             # エラー時にもストリーミング形式でエラーを返す
             yield f"data: {json.dumps({'error': f'申し訳ありません。エラーが発生しました: {str(e)}'}, ensure_ascii=False)}\n\n"
             yield f"data: {json.dumps({'done': True}, ensure_ascii=False)}\n\n"
-        finally:
-            # リソースのクリーンアップ
-            try:
-                if hasattr(self.client, '_client') and hasattr(self.client._client, 'close'):
-                    await self.client._client.close()
-            except Exception as cleanup_error:
-                logger.warning(f"Client cleanup warning: {str(cleanup_error)}")
     
     async def analyze_conversation_context(
         self, 

@@ -33,6 +33,67 @@
   gap: 12px;
 }
 
+/* RAGオプション選択のスタイル */
+.rag-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rag-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  color: white;
+}
+
+.rag-switch input[type="checkbox"] {
+  position: relative;
+  width: 44px;
+  height: 22px;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 11px;
+  outline: none;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.rag-switch input[type="checkbox"]:checked {
+  background: rgba(76, 175, 80, 0.8);
+}
+
+.rag-switch input[type="checkbox"]:before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.rag-switch input[type="checkbox"]:checked:before {
+  transform: translateX(22px);
+}
+
+.rag-switch input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.rag-label {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 .session-info {
   font-size: 12px;
   opacity: 0.8;

@@ -130,7 +130,8 @@ async def get_configuration() -> Dict[str, Any]:
             "environment": environment,
             "debug": os.getenv("DEBUG", "false").lower() == "true",
             "use_key_vault": bool(vault_url) and environment != "development",
-            "use_mock_ai": os.getenv("USE_MOCK_AI", "false").lower() == "true"
+            "use_mock_ai": os.getenv("USE_MOCK_AI", "false").lower() == "true",
+            "use_managed_identity": os.getenv("USE_MANAGED_IDENTITY", "false").lower() == "true"
         }
         
         # If in production/staging and Key Vault URL is provided, get additional secrets
