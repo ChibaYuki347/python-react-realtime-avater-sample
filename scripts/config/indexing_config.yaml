@@ -1,0 +1,52 @@
+# Azure RAG インデックス設定
+# このファイルでバッチスクリプトの実行オプションをデフォルト化できます
+
+# インデックス設定
+index:
+  name: "rag-index"
+  analyzer: "ja.microsoft"  # 日本語対応アナライザー
+  fields:
+    - name: "id"
+      type: "Edm.String"
+      key: true
+    - name: "content"
+      type: "Edm.String"
+      searchable: true
+      analyzer: "ja.microsoft"
+    - name: "filename"
+      type: "Edm.String"
+      filterable: true
+    - name: "uploaded_at"
+      type: "Edm.DateTimeOffset"
+      filterable: true
+
+# Blob Storage 設定
+storage:
+  container: "rag-documents"
+  allowed_extensions:
+    - ".txt"
+    - ".pdf"
+    - ".docx"
+    - ".md"
+
+# インデックス作成設定
+indexing:
+  batch_size: 100
+  retry_count: 3
+  timeout_seconds: 300
+
+# ログ設定
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# スケジューラー設定（cron/Azure Functions用）
+scheduler:
+  # cron 表記例: 毎日 午前2時に実行
+  cron_expression: "0 2 * * *"
+  timezone: "Asia/Tokyo"
+
+# セキュリティ設定
+security:
+  use_managed_identity: true  # 推奨: true （API キー使用は非推奨）
+  allowed_ip_ranges: []  # IP ホワイトリスト（オプション）

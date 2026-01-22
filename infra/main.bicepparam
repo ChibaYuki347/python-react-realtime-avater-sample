@@ -1,13 +1,13 @@
 using './main.bicep'
 
 // ====================================================================================================
-// フェーズ1開発環境 - パラメータ設定
+// フェーズ2開発環境 - パラメータ設定（RAG機能追加）
 // ====================================================================================================
 
 param projectName = 'ai-avatar'
 param environment = 'staging'
 param location = 'eastus'
-param deploymentPhase = 1
+param deploymentPhase = 2
 
 param openAIConfig = {
   deployments: [
@@ -29,9 +29,9 @@ param openAIConfig = {
 param tags = {
   project: 'AI-Enhanced-Avatar-System'
   environment: 'dev'
-  phase: 'phase1'
+  phase: 'phase2'
   costCenter: 'Innovation-Lab'
   owner: 'Development-Team'
   createdBy: 'bicep-template'
-  purpose: 'ai-avatar-development'
+  purpose: 'ai-avatar-rag-development'
 }

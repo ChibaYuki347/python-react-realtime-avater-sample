@@ -1,0 +1,18 @@
+# RAG インデキシング スクリプト用の依存パッケージ
+# backend/requirements.txt にも同じパッケージが含まれています
+
+# Azure SDK
+azure-identity>=1.13.0
+azure-storage-blob>=12.17.0
+azure-search-documents>=11.4.0b11
+
+# ユーティリティ
+python-dotenv>=1.0.0
+pyyaml>=6.0
+
+# スケジューリング（オプション: cron実行時は不要）
+schedule>=1.2.0
+APScheduler>=3.10.4
+
+# ログ・監視（オプション）
+python-json-logger>=2.0.7

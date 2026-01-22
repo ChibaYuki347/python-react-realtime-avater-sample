@@ -49,7 +49,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
     try {
       // Choose endpoint based on RAG mode
-      const endpoint = useRAG ? '/api/rag/query' : '/api/ai/chat';
+      const endpoint = useRAG ? '/api/azure-rag/query' : '/api/ai/chat';
       
       // Prepare request body
       const requestBody = useRAG 

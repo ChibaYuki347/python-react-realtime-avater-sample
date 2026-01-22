@@ -18,14 +18,6 @@ param logAnalyticsWorkspaceId string
 param existingOpenAIServiceName string
 
 // ====================================================================================================
-// 既存のOpenAIサービス参照
-// ====================================================================================================
-
-resource existingOpenAIService 'Microsoft.CognitiveServices/accounts@2023-05-01' existing = {
-  name: existingOpenAIServiceName
-}
-
-// ====================================================================================================
 // Azure AI Search Service（セマンティック検索・RAG機能）
 // ====================================================================================================
 
@@ -48,9 +40,10 @@ resource searchService 'Microsoft.Search/searchServices@2024-06-01-preview' = {
     encryptionWithCmk: {
       enforcement: 'Unspecified'
     }
-    disableLocalAuth: false
     authOptions: {
-      apiKeyOnly: {}
+      aadOrApiKey: {
+        aadAuthFailureMode: 'http401WithBearerChallenge'
+      }
     }
     semanticSearch: 'standard'
   }
@@ -58,6 +51,119 @@ resource searchService 'Microsoft.Search/searchServices@2024-06-01-preview' = {
     type: 'SystemAssigned'
   }
 }
+
+// ====================================================================================================
+// Azure Storage Account（RAGドキュメント保存・Blob Indexer用）
+// ====================================================================================================
+
+// Storage Account名を短縮（24文字制限対応）
+var storageAccountName = length('${replace(replace(resourcePrefix, '-', ''), '_', '')}rag') > 24 
+  ? '${take(replace(replace(resourcePrefix, '-', ''), '_', ''), 20)}rag'
+  : '${replace(replace(resourcePrefix, '-', ''), '_', '')}rag'
+
+resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+  name: storageAccountName
+  location: location
+  tags: tags
+  sku: {
+    name: 'Standard_LRS'
+  }
+  kind: 'StorageV2'
+  properties: {
+    dnsEndpointType: 'Standard'
+    defaultToOAuthAuthentication: false
+    publicNetworkAccess: 'Enabled'
+    allowCrossTenantReplication: false
+    minimumTlsVersion: 'TLS1_2'
+    allowBlobPublicAccess: false
+    allowSharedKeyAccess: true
+    networkAcls: {
+      bypass: 'AzureServices'
+      virtualNetworkRules: []
+      ipRules: []
+      defaultAction: 'Allow'
+    }
+    supportsHttpsTrafficOnly: true
+    encryption: {
+      requireInfrastructureEncryption: false
+      services: {
+        file: {
+          keyType: 'Account'
+          enabled: true
+        }
+        blob: {
+          keyType: 'Account'
+          enabled: true
+        }
+      }
+      keySource: 'Microsoft.Storage'
+    }
+    accessTier: 'Hot'
+  }
+}
+
+// Blob Service の設定
+resource blobServices 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
+  parent: storageAccount
+  name: 'default'
+  properties: {
+    changeFeed: {
+      enabled: false
+    }
+    restorePolicy: {
+      enabled: false
+    }
+    containerDeleteRetentionPolicy: {
+      enabled: true
+      days: 7
+    }
+    cors: {
+      corsRules: []
+    }
+    deleteRetentionPolicy: {
+      allowPermanentDelete: false
+      enabled: true
+      days: 7
+    }
+    isVersioningEnabled: false
+  }
+}
+
+// RAGドキュメント用コンテナ
+resource documentsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobServices
+  name: 'rag-documents'
+  properties: {
+    immutableStorageWithVersioning: {
+      enabled: false
+    }
+    defaultEncryptionScope: '$account-encryption-key'
+    denyEncryptionScopeOverride: false
+    publicAccess: 'None'
+  }
+}
+
+// ====================================================================================================
+// RBAC: Search Service に Storage Blob Data Reader ロールを付与
+// ====================================================================================================
+
+resource searchServiceStorageRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, searchService.id, storageAccount.id, 'Storage Blob Data Reader')
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: '/subscriptions/${subscription().subscriptionId}/providers/Microsoft.Authorization/roleDefinitions/2a2b9908-6ea1-4ae2-8e65-a410df84e7d1'
+    principalId: searchService.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+  dependsOn: [
+    storageAccount
+    searchService
+  ]
+}
+
+// ====================================================================================================
+// 注: インデックス・データソース・インデクサーは Azure Portal または Python スクリプトで作成
+// ====================================================================================================
 
 // ====================================================================================================
 // Azure Cosmos DB（会話履歴・ユーザープロファイル）
@@ -299,6 +405,18 @@ output searchServiceId string = searchService.id
 @description('Azure AI Search Service 名')
 output searchServiceName string = searchService.name
 
+@description('Storage Account 名')
+output storageAccountName string = storageAccount.name
+
+@description('Storage Account のリソースID')
+output storageAccountId string = storageAccount.id
+
+@description('Blob Service のエンドポイント')
+output blobServiceEndpoint string = storageAccount.properties.primaryEndpoints.blob
+
+@description('ドキュメントコンテナ名')
+output documentsContainerName string = documentsContainer.name
+
 @description('Azure Cosmos DB のエンドポイント')
 output cosmosDbEndpoint string = cosmosDbAccount.properties.documentEndpoint
 
@@ -313,11 +431,13 @@ output cosmosDatabaseName string = cosmosDatabase.name
 
 @description('フェーズ2で利用可能な機能一覧')
 output availableFeatures array = [
-  'Document Indexing'
+  'Document Storage (Azure Blob Storage)'
+  'Document Indexing (Blob Indexer)'
   'Semantic Search'
   'RAG (Retrieval-Augmented Generation)'
   'Conversation History Storage'
   'User Profile Management'
   'Document Metadata Management'
   'Hybrid Search (Keyword + Semantic)'
+  'Document Processing Pipeline'
 ]

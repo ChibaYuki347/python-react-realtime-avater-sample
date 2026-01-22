@@ -37,13 +37,16 @@ infra/
   - Conversation History
 
 ### 🔍 フェーズ2: RAG（検索拡張生成）システム  
+- **Azure Storage Account**: RAGドキュメント保存・Blob Indexer用
 - **Azure AI Search**: セマンティック検索・ドキュメントインデックス
 - **Azure Cosmos DB**: 会話履歴・ドキュメントメタデータ保存
 - **自動生成される機能**:
-  - Document Indexing
+  - Document Storage (Blob Storage)
+  - Document Indexing (Blob Indexer)
   - Semantic Search
   - RAG (Retrieval-Augmented Generation)
   - User Profile Management
+  - Document Processing Pipeline
 
 ### 🎤 フェーズ3: 音声入力強化システム
 - **Event Hub**: リアルタイム音声ストリーミング

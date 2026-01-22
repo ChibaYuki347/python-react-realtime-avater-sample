@@ -153,8 +153,11 @@ output endpoints object = {
   openAIEndpoint: deploymentPhase == 1 ? phase1Resources.outputs.openAIEndpoint : 'https://ai-avatar-staging-openai.openai.azure.com/'
   
   // フェーズ2リソース（条件付き）
-  searchServiceEndpoint: deploymentPhase >= 2 ? phase2Resources!.outputs.searchServiceEndpoint : ''
-  cosmosDbEndpoint: deploymentPhase >= 2 ? phase2Resources!.outputs.cosmosDbEndpoint : ''
+  searchServiceEndpoint: deploymentPhase >= 2 ? phase2Resources.outputs.searchServiceEndpoint : ''
+  cosmosDbEndpoint: deploymentPhase >= 2 ? phase2Resources.outputs.cosmosDbEndpoint : ''
+  storageAccountName: deploymentPhase >= 2 ? phase2Resources.outputs.storageAccountName : ''
+  blobServiceEndpoint: deploymentPhase >= 2 ? phase2Resources.outputs.blobServiceEndpoint : ''
+  documentsContainerName: deploymentPhase >= 2 ? phase2Resources.outputs.documentsContainerName : ''
   
   // フェーズ3以降は今後実装
 }
@@ -165,6 +168,8 @@ output keyVaultSecrets object = {
   openAIApiKey: 'openai-api-key'
   searchServiceKey: deploymentPhase >= 2 ? 'search-service-key' : ''
   cosmosDbKey: deploymentPhase >= 2 ? 'cosmosdb-key' : ''
+  storageAccountKey: deploymentPhase >= 2 ? 'storage-account-key' : ''
+  storageConnectionString: deploymentPhase >= 2 ? 'storage-connection-string' : ''
   applicationInsightsKey: 'appinsights-instrumentation-key'
 }
 

@@ -1,0 +1,631 @@
+"""
+Azure AI Search + Blob Storage を使用したRAGサービス
+PDFやWordドキュメントをBlob Storageにアップロードし、
+Blob Indexerを使用してAzure AI Searchでインデックス化
+"""
+import os
+import json
+import logging
+from typing import List, Dict, Any, Optional
+from pathlib import Path
+import uuid
+from datetime import datetime, timezone
+
+from azure.storage.blob import BlobServiceClient
+from azure.search.documents import SearchClient
+from azure.search.documents.indexes import SearchIndexClient
+from azure.search.documents.models import VectorizedQuery
+from azure.search.documents.indexes.models import (
+    SearchIndex,
+    SearchField,
+    SearchFieldDataType,
+    SimpleField,
+    SearchableField,
+    VectorSearch,
+    HnswAlgorithmConfiguration,
+    VectorSearchProfile,
+    SemanticConfiguration,
+    SemanticSearch,
+    SemanticField,
+    SemanticPrioritizedFields,
+    SearchIndexerDataContainer,
+    SearchIndexerDataSourceConnection,
+    SearchIndexer,
+    IndexingSchedule,
+    FieldMapping
+)
+from azure.core.credentials import AzureKeyCredential
+from azure.identity import DefaultAzureCredential
+from openai import AsyncAzureOpenAI
+from PyPDF2 import PdfReader
+from docx import Document as DocxDocument
+
+logger = logging.getLogger(__name__)
+
+class AzureRAGService:
+    """Azure AI Search + Blob Storageを使用したRAGサービス"""
+    
+    def __init__(self):
+        # 設定を読み込み
+        self.search_endpoint = os.getenv("AZURE_SEARCH_SERVICE_ENDPOINT")
+        self.search_key = os.getenv("AZURE_SEARCH_API_KEY")
+        self.index_name = os.getenv("AZURE_SEARCH_INDEX_NAME", "documents")
+        self.storage_connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+        self.storage_container_name = os.getenv("AZURE_STORAGE_CONTAINER_NAME", "documents")
+        
+        # OpenAI設定
+        self.openai_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+        self.openai_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
+        self.openai_api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-21")
+        
+        # RAG設定
+        self.chunk_size = int(os.getenv("RAG_CHUNK_SIZE", "1000"))
+        self.chunk_overlap = int(os.getenv("RAG_CHUNK_OVERLAP", "200"))
+        self.max_search_results = int(os.getenv("RAG_MAX_SEARCH_RESULTS", "5"))
+        
+        # 認証設定
+        use_managed_identity = os.getenv("USE_MANAGED_IDENTITY", "false").lower() == "true"
+        if use_managed_identity:
+            self.credential = DefaultAzureCredential()
+        else:
+            self.credential = AzureKeyCredential(self.search_key)
+        
+        # クライアント初期化
+        self._init_clients()
+        
+    def _init_clients(self):
+        """Azure クライアントを初期化"""
+        try:
+            # Blob Storage クライアント
+            self.blob_service_client = BlobServiceClient.from_connection_string(
+                self.storage_connection_string
+            )
+            
+            # Search クライアント
+            if isinstance(self.credential, AzureKeyCredential):
+                self.search_client = SearchClient(
+                    endpoint=self.search_endpoint,
+                    index_name=self.index_name,
+                    credential=self.credential
+                )
+                self.search_index_client = SearchIndexClient(
+                    endpoint=self.search_endpoint,
+                    credential=self.credential
+                )
+            else:  # Managed Identity
+                self.search_client = SearchClient(
+                    endpoint=self.search_endpoint,
+                    index_name=self.index_name,
+                    credential=self.credential
+                )
+                self.search_index_client = SearchIndexClient(
+                    endpoint=self.search_endpoint,
+                    credential=self.credential
+                )
+            
+            # OpenAI クライアント
+            use_managed_identity = os.getenv("USE_MANAGED_IDENTITY", "false").lower() == "true"
+            if use_managed_identity:
+                self.openai_client = AsyncAzureOpenAI(
+                    azure_endpoint=self.openai_endpoint,
+                    api_version=self.openai_api_version,
+                    azure_ad_token_provider=self.credential.get_token
+                )
+            else:
+                api_key = os.getenv("AZURE_OPENAI_API_KEY")
+                self.openai_client = AsyncAzureOpenAI(
+                    api_key=api_key,
+                    api_version=self.openai_api_version,
+                    azure_endpoint=self.openai_endpoint
+                )
+                
+            logger.info("Azure RAG service clients initialized successfully")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize Azure clients: {e}")
+            raise
+    
+    async def upload_document_to_blob(self, file_path: str, blob_name: str = None) -> str:
+        """ドキュメントをBlob Storageにアップロード"""
+        try:
+            if not blob_name:
+                blob_name = f"{uuid.uuid4()}_{os.path.basename(file_path)}"
+            
+            # コンテナがない場合は作成
+            container_client = self.blob_service_client.get_container_client(
+                self.storage_container_name
+            )
+            try:
+                container_client.create_container()
+                logger.info(f"Created container: {self.storage_container_name}")
+            except Exception:
+                pass  # コンテナが既に存在する場合
+            
+            # ファイルをアップロード
+            blob_client = self.blob_service_client.get_blob_client(
+                container=self.storage_container_name,
+                blob=blob_name
+            )
+            
+            with open(file_path, "rb") as data:
+                blob_client.upload_blob(data, overwrite=True)
+            
+            blob_url = blob_client.url
+            logger.info(f"Successfully uploaded {file_path} to {blob_url}")
+            return blob_url
+            
+        except Exception as e:
+            logger.error(f"Failed to upload document to blob: {e}")
+            raise
+    
+    def extract_text_from_document(self, file_path: str) -> str:
+        """ドキュメントからテキストを抽出"""
+        file_extension = Path(file_path).suffix.lower()
+        
+        try:
+            if file_extension == '.pdf':
+                return self._extract_from_pdf(file_path)
+            elif file_extension in ['.doc', '.docx']:
+                return self._extract_from_docx(file_path)
+            elif file_extension == '.txt':
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    return file.read()
+            else:
+                raise ValueError(f"Unsupported file format: {file_extension}")
+                
+        except Exception as e:
+            logger.error(f"Failed to extract text from {file_path}: {e}")
+            raise
+    
+    def _extract_from_pdf(self, file_path: str) -> str:
+        """PDFファイルからテキストを抽出"""
+        reader = PdfReader(file_path)
+        text = ""
+        for page in reader.pages:
+            text += page.extract_text() + "\n"
+        return text.strip()
+    
+    def _extract_from_docx(self, file_path: str) -> str:
+        """Wordファイルからテキストを抽出"""
+        doc = DocxDocument(file_path)
+        text = ""
+        for paragraph in doc.paragraphs:
+            text += paragraph.text + "\n"
+        return text.strip()
+    
+    def chunk_text(self, text: str) -> List[str]:
+        """テキストをチャンクに分割"""
+        chunks = []
+        start = 0
+        text_length = len(text)
+        
+        while start < text_length:
+            end = start + self.chunk_size
+            if end < text_length:
+                # 文の境界で切る
+                last_sentence = text.rfind('.', start, end)
+                if last_sentence != -1 and last_sentence > start:
+                    end = last_sentence + 1
+            
+            chunk = text[start:end].strip()
+            if chunk:
+                chunks.append(chunk)
+            
+            start = end - self.chunk_overlap
+            
+        return chunks
+    
+    async def create_search_index(self):
+        """Azure AI Search インデックスを作成"""
+        try:
+            fields = [
+                SimpleField(name="id", type=SearchFieldDataType.String, key=True),
+                SearchableField(name="content", type=SearchFieldDataType.String, analyzer="ja.microsoft"),
+                SimpleField(name="source_file", type=SearchFieldDataType.String),
+                SimpleField(name="chunk_id", type=SearchFieldDataType.String),
+                SimpleField(name="blob_url", type=SearchFieldDataType.String),
+                SimpleField(name="created_at", type=SearchFieldDataType.DateTimeOffset),
+            ]
+            
+            # セマンティック検索設定
+            semantic_config = SemanticConfiguration(
+                name="default",
+                prioritized_fields=SemanticPrioritizedFields(
+                    content_fields=[SemanticField(field_name="content")]
+                )
+            )
+            
+            semantic_search = SemanticSearch(configurations=[semantic_config])
+            
+            # インデックス作成
+            index = SearchIndex(
+                name=self.index_name,
+                fields=fields,
+                semantic_search=semantic_search
+            )
+            
+            self.search_index_client.create_or_update_index(index)
+            logger.info(f"Successfully created/updated search index: {self.index_name}")
+            
+        except Exception as e:
+            logger.error(f"Failed to create search index: {e}")
+            raise
+
+@dataclass
+class RAGQuery:
+    """RAGクエリ"""
+    user_id: str
+    query: str
+    conversation_id: Optional[str] = None
+    max_results: int = 5
+    include_metadata: bool = True
+
+@dataclass
+class RAGResponse:
+    """RAG応答"""
+    query: str
+    answer: str
+    relevant_documents: List[SearchResult]
+    conversation_id: str
+    timestamp: str
+    metadata: Dict[str, Any] = None
+
+class AzureRAGService:
+    """Azure AI Search + Blob Storageを使用したRAGサービス"""
+    
+    def __init__(self):
+        self.blob_service_client: Optional[BlobServiceClient] = None
+        self.search_client: Optional[SearchClient] = None
+        self.search_index_client: Optional[SearchIndexClient] = None
+        self.openai_client: Optional[AsyncAzureOpenAI] = None
+        self.container_name = os.getenv("AZURE_STORAGE_CONTAINER_NAME", "documents")
+        self.index_name = os.getenv("AZURE_SEARCH_INDEX_NAME", "documents")
+        self._initialized = False
+    
+    async def initialize(self) -> bool:
+        """サービス初期化"""
+        try:
+            if self._initialized:
+                return True
+            
+            logger.info("Azure RAG Service初期化開始")
+            
+            # Azure認証
+            use_managed_identity = os.getenv("USE_MANAGED_IDENTITY", "false").lower() == "true"
+            if use_managed_identity:
+                credential = DefaultAzureCredential()
+                logger.info("Managed Identity認証を使用")
+            else:
+                credential = None
+                logger.info("API Key認証を使用")
+            
+            # Blob Storage初期化
+            await self._initialize_blob_storage(credential)
+            
+            # Azure AI Search初期化
+            await self._initialize_search_service(credential)
+            
+            # Azure OpenAI初期化
+            await self._initialize_openai_client(credential)
+            
+            self._initialized = True
+            logger.info("Azure RAG Service初期化完了")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Azure RAG Service初期化失敗: {e}")
+            return False
+    
+    async def _initialize_blob_storage(self, credential):
+        """Blob Storage初期化"""
+        connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+        
+        if connection_string:
+            self.blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+            logger.info("Connection String でBlob Storage初期化")
+        elif credential:
+            # Managed Identity使用時はアカウントURLが必要
+            # 環境変数から取得する必要があります
+            account_url = os.getenv("AZURE_STORAGE_ACCOUNT_URL")
+            if account_url:
+                self.blob_service_client = BlobServiceClient(account_url=account_url, credential=credential)
+                logger.info("Managed Identity でBlob Storage初期化")
+            else:
+                raise ValueError("AZURE_STORAGE_ACCOUNT_URL環境変数が必要です")
+        else:
+            raise ValueError("Blob Storage認証情報が設定されていません")
+        
+        # コンテナが存在しない場合は作成
+        try:
+            await asyncio.get_event_loop().run_in_executor(
+                None, 
+                lambda: self.blob_service_client.create_container(self.container_name, exist_ok=True)
+            )
+            logger.info(f"Blob Storage コンテナ '{self.container_name}' 準備完了")
+        except Exception as e:
+            logger.error(f"Blob Storage コンテナ作成失敗: {e}")
+            raise
+    
+    async def _initialize_search_service(self, credential):
+        """Azure AI Search初期化"""
+        endpoint = os.getenv("AZURE_SEARCH_SERVICE_ENDPOINT")
+        api_key = os.getenv("AZURE_SEARCH_API_KEY")
+        
+        if not endpoint:
+            raise ValueError("AZURE_SEARCH_SERVICE_ENDPOINT環境変数が必要です")
+        
+        if api_key:
+            search_credential = AzureKeyCredential(api_key)
+            logger.info("API Key でAzure AI Search初期化")
+        elif credential:
+            search_credential = credential
+            logger.info("Managed Identity でAzure AI Search初期化")
+        else:
+            raise ValueError("Azure AI Search認証情報が設定されていません")
+        
+        self.search_client = SearchClient(
+            endpoint=endpoint,
+            index_name=self.index_name,
+            credential=search_credential
+        )
+        
+        self.search_index_client = SearchIndexClient(
+            endpoint=endpoint,
+            credential=search_credential
+        )
+        
+        logger.info(f"Azure AI Search クライアント初期化完了: {endpoint}")
+    
+    async def _initialize_openai_client(self, credential):
+        """Azure OpenAI初期化"""
+        endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+        api_key = os.getenv("AZURE_OPENAI_API_KEY")
+        api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-21")
+        
+        if not endpoint:
+            raise ValueError("AZURE_OPENAI_ENDPOINT環境変数が必要です")
+        
+        if api_key and not os.getenv("USE_MANAGED_IDENTITY", "false").lower() == "true":
+            self.openai_client = AsyncAzureOpenAI(
+                azure_endpoint=endpoint,
+                api_key=api_key,
+                api_version=api_version
+            )
+            logger.info("API Key でAzure OpenAI初期化")
+        elif credential:
+            # Managed Identity使用時
+            token = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: credential.get_token("https://cognitiveservices.azure.com/.default")
+            )
+            
+            self.openai_client = AsyncAzureOpenAI(
+                azure_endpoint=endpoint,
+                azure_ad_token=token.token,
+                api_version=api_version
+            )
+            logger.info("Managed Identity でAzure OpenAI初期化")
+        else:
+            raise ValueError("Azure OpenAI認証情報が設定されていません")
+    
+    async def upload_document(self, file_path: str) -> DocumentMetadata:
+        """ドキュメントをBlob Storageにアップロード"""
+        if not self._initialized:
+            await self.initialize()
+        
+        file_path = Path(file_path)
+        if not file_path.exists():
+            raise FileNotFoundError(f"ファイルが見つかりません: {file_path}")
+        
+        # ファイル情報取得
+        file_size = file_path.stat().st_size
+        content_type = self._get_content_type(file_path.suffix)
+        
+        # ファイルハッシュ生成
+        file_hash = await self._calculate_file_hash(file_path)
+        
+        # Blob名生成（日付 + ハッシュ + ファイル名）
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        blob_name = f"{timestamp}_{file_hash[:8]}_{file_path.name}"
+        
+        try:
+            # Blobクライアント作成
+            blob_client = self.blob_service_client.get_blob_client(
+                container=self.container_name,
+                blob=blob_name
+            )
+            
+            # ファイルアップロード
+            async with aiofiles.open(file_path, 'rb') as file:
+                file_data = await file.read()
+                await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: blob_client.upload_blob(
+                        file_data,
+                        content_type=content_type,
+                        overwrite=True,
+                        metadata={
+                            "original_name": file_path.name,
+                            "upload_time": datetime.now().isoformat(),
+                            "file_hash": file_hash
+                        }
+                    )
+                )
+            
+            # メタデータ作成
+            metadata = DocumentMetadata(
+                file_name=file_path.name,
+                file_path=str(file_path),
+                file_size=file_size,
+                content_type=content_type,
+                upload_time=datetime.now().isoformat(),
+                blob_url=blob_client.url,
+                document_hash=file_hash
+            )
+            
+            logger.info(f"ドキュメントアップロード完了: {file_path.name} -> {blob_name}")
+            return metadata
+            
+        except Exception as e:
+            logger.error(f"ドキュメントアップロード失敗: {e}")
+            raise
+    
+    async def _calculate_file_hash(self, file_path: Path) -> str:
+        """ファイルハッシュ計算"""
+        hash_sha256 = hashlib.sha256()
+        async with aiofiles.open(file_path, 'rb') as f:
+            while chunk := await f.read(8192):
+                hash_sha256.update(chunk)
+        return hash_sha256.hexdigest()
+    
+    def _get_content_type(self, extension: str) -> str:
+        """ファイル拡張子からContent-Typeを取得"""
+        content_types = {
+            '.pdf': 'application/pdf',
+            '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            '.doc': 'application/msword',
+            '.txt': 'text/plain',
+            '.md': 'text/markdown'
+        }
+        return content_types.get(extension.lower(), 'application/octet-stream')
+    
+    async def search_documents(self, query: str, max_results: int = 5) -> List[SearchResult]:
+        """ドキュメント検索"""
+        if not self._initialized:
+            await self.initialize()
+        
+        try:
+            # Azure AI Searchで検索実行
+            search_results = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: list(self.search_client.search(
+                    search_text=query,
+                    top=max_results,
+                    include_total_count=True,
+                    highlight_fields="content",
+                    search_mode="all"
+                ))
+            )
+            
+            # 検索結果を構造化
+            results = []
+            for result in search_results:
+                metadata = DocumentMetadata(
+                    file_name=result.get("metadata_storage_name", ""),
+                    file_path=result.get("metadata_storage_path", ""),
+                    file_size=result.get("metadata_storage_size", 0),
+                    content_type=result.get("metadata_content_type", ""),
+                    upload_time=result.get("metadata_last_modified", ""),
+                    blob_url=result.get("metadata_storage_url", ""),
+                    document_hash=""
+                )
+                
+                search_result = SearchResult(
+                    content=result.get("content", ""),
+                    score=result.get("@search.score", 0.0),
+                    metadata=metadata,
+                    highlights=result.get("@search.highlights", {}).get("content", [])
+                )
+                results.append(search_result)
+            
+            logger.info(f"検索完了: クエリ='{query}', 結果数={len(results)}")
+            return results
+            
+        except Exception as e:
+            logger.error(f"ドキュメント検索失敗: {e}")
+            return []
+    
+    async def generate_rag_response(self, query: RAGQuery) -> RAGResponse:
+        """RAG応答生成"""
+        try:
+            # ドキュメント検索
+            search_results = await self.search_documents(
+                query.query, 
+                max_results=query.max_results
+            )
+            
+            # コンテキスト構築
+            context = self._build_context(search_results)
+            
+            # プロンプト作成
+            system_prompt = self._create_system_prompt()
+            user_prompt = self._create_user_prompt(query.query, context)
+            
+            # Azure OpenAIで応答生成
+            response = await self.openai_client.chat.completions.create(
+                model=os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4"),
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.7,
+                max_tokens=1000
+            )
+            
+            answer = response.choices[0].message.content
+            
+            # 応答データ構築
+            rag_response = RAGResponse(
+                query=query.query,
+                answer=answer,
+                relevant_documents=search_results,
+                conversation_id=query.conversation_id or f"conv_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                timestamp=datetime.now().isoformat(),
+                metadata={
+                    "search_results_count": len(search_results),
+                    "user_id": query.user_id
+                }
+            )
+            
+            logger.info(f"RAG応答生成完了: ユーザー={query.user_id}, クエリ='{query.query}'")
+            return rag_response
+            
+        except Exception as e:
+            logger.error(f"RAG応答生成失敗: {e}")
+            # エラー時のフォールバック応答
+            return RAGResponse(
+                query=query.query,
+                answer=f"申し訳ございません。エラーが発生しました: {str(e)}",
+                relevant_documents=[],
+                conversation_id=query.conversation_id or f"conv_error_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                timestamp=datetime.now().isoformat(),
+                metadata={"error": str(e)}
+            )
+    
+    def _build_context(self, search_results: List[SearchResult]) -> str:
+        """検索結果からコンテキストを構築"""
+        if not search_results:
+            return "関連するドキュメントが見つかりませんでした。"
+        
+        context_parts = []
+        for i, result in enumerate(search_results, 1):
+            context_part = f"[文書{i}: {result.metadata.file_name}]\n{result.content}"
+            if result.highlights:
+                context_part += f"\n重要箇所: {', '.join(result.highlights)}"
+            context_parts.append(context_part)
+        
+        return "\n\n".join(context_parts)
+    
+    def _create_system_prompt(self) -> str:
+        """システムプロンプト作成"""
+        return """あなたは親しみやすいAIアシスタントです。
+提供された文書を基に、正確で有用な回答を提供してください。
+
+回答の際は以下を心がけてください：
+- 提供された文書の内容に基づいて回答する
+- 文書に記載がない内容については推測せず、「提供された文書にはその情報が含まれていません」と伝える
+- 親しみやすく、分かりやすい日本語で回答する
+- 必要に応じて具体的な文書名を参照する"""
+    
+    def _create_user_prompt(self, query: str, context: str) -> str:
+        """ユーザープロンプト作成"""
+        return f"""以下の文書を参考にして、質問に答えてください。
+
+【文書内容】
+{context}
+
+【質問】
+{query}
+
+【回答】
+"""

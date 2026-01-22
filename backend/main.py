@@ -7,13 +7,13 @@ import httpx
 from dotenv import load_dotenv
 import logging
 
-# Import new AI routes
-from routes.ai_routes import router as ai_router
-# Import new RAG routes  
-from routes.rag_routes import router as rag_router
-
-# 環境変数を読み込み
+# 環境変数を最初に読み込む
 load_dotenv()
+
+# Import AI routes
+from routes.ai_routes import router as ai_router
+# Import Azure RAG routes (Blob Storage + AI Search with Managed Identity)
+from routes.azure_rag_routes import router as azure_rag_router
 
 app = FastAPI(
     title="AI強化リアルタイムアバターAPI", 
@@ -36,8 +36,8 @@ logger = logging.getLogger(__name__)
 
 # AI routes registration
 app.include_router(ai_router, prefix="/api")
-# RAG routes registration
-app.include_router(rag_router)
+# Azure RAG routes registration (Blob Storage + AI Search with Managed Identity)
+app.include_router(azure_rag_router)
 
 # Azure configuration from environment (fallback for local development)
 KEY_VAULT_URL = os.getenv("KEY_VAULT_URL", "https://ai-avatar-staging-kv.vault.azure.net/")

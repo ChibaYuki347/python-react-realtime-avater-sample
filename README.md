@@ -19,10 +19,24 @@ Azure AI Speech サービスのカスタムボイスとカスタムアバター�
 
 ```
 python-react-realtime-avater-sample/
-├── backend/                    # FastAPI バックエンド
+├── backend/                    # FastAPI バックエンド（リアルタイムAPI）
 │   ├── main.py                # メインAPIサーバー
 │   ├── requirements.txt       # Python依存関係
+│   ├── routes/               # APIルート
+│   │   ├── ai_routes.py      # AI チャット・応答エンドポイント
+│   │   └── azure_rag_routes.py # RAG 検索エンドポイント
+│   ├── services/             # ビジネスロジック
+│   │   └── azure_rag_service.py # RAG 検索・応答生成
 │   └── .env.example          # 環境変数テンプレート
+├── scripts/                    # バッチ処理スクリプト（RAG インデキシング）
+│   ├── index_documents.py    # 初期インデックス作成スクリプト
+│   ├── update_search_index.py # インデックス更新スクリプト
+│   ├── utils/
+│   │   └── rag_indexer.py    # インデックス作成コアロジック
+│   ├── config/
+│   │   └── indexing_config.yaml # インデックス設定
+│   ├── README.md             # スクリプト使用手順
+│   └── requirements.txt      # スクリプト依存関係
 ├── frontend/                  # React + TypeScript フロントエンド
 │   ├── public/               # 静的ファイル
 │   ├── src/                  # TypeScriptソースコード
@@ -33,8 +47,21 @@ python-react-realtime-avater-sample/
 │   │   └── index.tsx        # エントリーポイント
 │   └── package.json         # Node.js依存関係
 ├── docs/                     # ドキュメント
+├── .github/copilot-instructions.md # プロジェクトガイドライン
 └── README.md                # このファイル
 ```
+
+### アーキテクチャの役割分離
+
+- **backend/**: リアルタイムAPI
+  - RAG インデックスの読み込み・検索
+  - 生成AIによる応答生成
+  - カスタムボイス・アバター合成
+  
+- **scripts/**: バッチ処理
+  - ドキュメント処理・アップロード
+  - Azure AI Search インデックス作成
+  - 定期実行タスク（cron/scheduler対応）
 
 ## 🚀 セットアップ手順
 
