@@ -22,6 +22,8 @@ export class WebSpeechRecognizer {
   private recognition: any;
   private isListening: boolean = false;
   private interimTranscript: string = '';
+  private retryCount: number = 0;
+  private maxRetries: number = 3;
 
   constructor() {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -32,6 +34,23 @@ export class WebSpeechRecognizer {
     
     this.recognition = new SpeechRecognition();
     this.setupRecognition();
+  }
+
+  /**
+   * エラーコードを人間が読める形に変換
+   */
+  private getErrorMessage(error: string): string {
+    const errorMap: { [key: string]: string } = {
+      'no-speech': '音声が検出されませんでした。マイクが正しく接続されているか確認してください。',
+      'audio-capture': 'マイクが見つかりません。マイク接続を確認してください。',
+      'not-allowed': 'マイクへのアクセスが拒否されました。ブラウザの設定を確認してください。',
+      'network': 'ネットワーク接続エラー。インターネット接続を確認してください。',
+      'aborted': '音声認識がキャンセルされました。',
+      'service-not-available': '音声認識サービスが利用できません。',
+      'bad-grammar': '音声認識文法エラーが発生しました。',
+      'unknown': '不明なエラーが発生しました。'
+    };
+    return errorMap[error] || errorMap['unknown'];
   }
 
   private setupRecognition() {
@@ -67,7 +86,8 @@ export class WebSpeechRecognizer {
 
     // エラーハンドリング
     this.recognition.onerror = (event: any) => {
-      console.error('[Speech-to-Text] エラー:', event.error);
+      const errorMessage = this.getErrorMessage(event.error);
+      console.error('[Speech-to-Text] エラー:', event.error, ' - ', errorMessage);
     };
 
     // 認識終了時
@@ -132,6 +152,23 @@ export class WebSpeechRecognizer {
   }
 
   /**
+   * エラーメッセージを取得
+   */
+  public getErrorMessage(error: string): string {
+    const errorMap: { [key: string]: string } = {
+      'no-speech': '音声が検出されませんでした。マイクが正しく接続されているか確認してください。',
+      'audio-capture': 'マイクが見つかりません。マイク接続を確認してください。',
+      'not-allowed': 'マイクへのアクセスが拒否されました。ブラウザの設定を確認してください。',
+      'network': 'ネットワーク接続エラー。インターネット接続を確認してください。',
+      'aborted': '音声認識がキャンセルされました。',
+      'service-not-available': '音声認識サービスが利用できません。',
+      'bad-grammar': '音声認識文法エラーが発生しました。',
+      'unknown': '不明なエラーが発生しました。'
+    };
+    return errorMap[error] || errorMap['unknown'];
+  }
+
+  /**
    * キャンセル
    */
   public abort(): void {
@@ -166,4 +203,41 @@ export async function checkMicrophonePermission(): Promise<boolean> {
 export function isBrowserSupported(): boolean {
   const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
   return !!SpeechRecognition;
+}
+
+/**
+ * Speech-to-Text の環境情報をチェック
+ */
+export function checkSpeechToTextEnvironment(): {
+  isSupported: boolean;
+  isSecure: boolean;
+  environment: string;
+  message: string;
+} {
+  const isSupported = isBrowserSupported();
+  const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost';
+  
+  let message = '';
+  if (!isSupported) {
+    message = 'お使いのブラウザは Web Speech API に対応していません。Chrome、Edge、Safari で試してください。';
+  } else if (!isSecure) {
+    message = 'Web Speech API は HTTPS または localhost でのみ動作します。';
+  } else {
+    message = 'Speech-to-Text は利用可能です。';
+  }
+
+  console.log('[Speech-to-Text]', {
+    isSupported,
+    isSecure,
+    protocol: window.location.protocol,
+    hostname: window.location.hostname,
+    message
+  });
+
+  return {
+    isSupported,
+    isSecure,
+    environment: `${window.location.protocol}//${window.location.hostname}`,
+    message
+  };
 }

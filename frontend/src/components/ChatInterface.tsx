@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { WebSpeechRecognizer, checkMicrophonePermission, isBrowserSupported } from '../utils/speechToTextUtils';
+import { WebSpeechRecognizer, checkMicrophonePermission, isBrowserSupported, checkSpeechToTextEnvironment } from '../utils/speechToTextUtils';
 
 interface Message {
   id: string;
@@ -28,6 +28,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [interimText, setInterimText] = useState('');
   const [microphoneSupported, setMicrophoneSupported] = useState(false);
   const [microphonePermission, setMicrophonePermission] = useState<boolean | null>(null);
+  const [speechError, setSpeechError] = useState<string>('');
   
   const abortControllerRef = useRef<AbortController | null>(null);
   const speechRecognizerRef = useRef<WebSpeechRecognizer | null>(null);
@@ -35,17 +36,31 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   // 初期化：Speech-to-Text サポート確認とマイク権限チェック
   useEffect(() => {
     const initializeSpeechToText = async () => {
-      const isSupported = isBrowserSupported();
-      setMicrophoneSupported(isSupported);
+      // 環境チェック
+      const envCheck = checkSpeechToTextEnvironment();
+      console.log('[ChatInterface] Speech-to-Text 環境情報:', envCheck);
 
-      if (isSupported) {
-        try {
-          const hasPermission = await checkMicrophonePermission();
-          setMicrophonePermission(hasPermission);
-        } catch (error) {
-          console.error('[ChatInterface] マイク権限チェックエラー:', error);
-          setMicrophonePermission(false);
+      if (!envCheck.isSupported) {
+        setSpeechError(envCheck.message);
+        setMicrophoneSupported(false);
+        return;
+      }
+
+      if (!envCheck.isSecure) {
+        console.warn('[ChatInterface] Web Speech API セキュリティ警告:', envCheck.message);
+      }
+
+      setMicrophoneSupported(true);
+
+      try {
+        const hasPermission = await checkMicrophonePermission();
+        setMicrophonePermission(hasPermission);
+        if (!hasPermission) {
+          setSpeechError('マイクへのアクセス権限がありません。ブラウザの設定を確認してください。');
         }
+      } catch (error) {
+        console.error('[ChatInterface] マイク権限チェックエラー:', error);
+        setMicrophonePermission(false);
       }
     };
 
@@ -237,11 +252,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   const startListening = async () => {
     if (!microphonePermission) {
-      alert('マイクへのアクセス権限がありません。ブラウザの設定を確認してください。');
+      setSpeechError('マイクへのアクセス権限がありません。ブラウザの設定を確認してください。');
       return;
     }
 
     try {
+      setSpeechError('');
       setIsListening(true);
       setInterimText('');
 
@@ -257,6 +273,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         setInterimText(recognizer.getInterimTranscript());
       }, 100);
 
+      // エラーハンドラーをオーバーライド
+      const originalRecognition = (recognizer as any).recognition;
+      if (originalRecognition) {
+        originalRecognition.onerror = (event: any) => {
+          const errorMsg = recognizer.getErrorMessage(event.error);
+          setSpeechError(errorMsg);
+          console.error('[ChatInterface] Speech-to-Text エラー:', event.error, '-', errorMsg);
+          setIsListening(false);
+          clearInterval(updateInterval);
+        };
+      }
+
       // 音声認識開始
       recognizer.start();
 
@@ -271,8 +299,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       return () => clearInterval(updateInterval);
     } catch (error) {
       console.error('[ChatInterface] 音声認識開始エラー:', error);
+      setSpeechError('音声認識の開始に失敗しました。ブラウザの設定を確認してください。');
       setIsListening(false);
-      alert('音声認識の開始に失敗しました。');
     }
   };
 
@@ -287,10 +315,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       setInputMessage(finalText);
       setInterimText('');
       setIsListening(false);
+      setSpeechError('');
 
       console.log('[ChatInterface] 音声認識完了:', finalText);
     } catch (error) {
       console.error('[ChatInterface] 音声認識停止エラー:', error);
+      setSpeechError('音声認識の停止中にエラーが発生しました。');
       setIsListening(false);
     }
   };
@@ -414,6 +444,35 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               color: '#856404'
             }}>
               🎤 {interimText ? `認識中: ${interimText}` : '音声入力待機中...'}
+            </div>
+          )}
+
+          {/* エラーメッセージ表示 */}
+          {speechError && (
+            <div style={{
+              padding: '0.75rem',
+              backgroundColor: '#f8d7da',
+              border: '1px solid #f5c6cb',
+              borderRadius: '0.5rem',
+              fontSize: '0.9rem',
+              color: '#721c24',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <span>⚠️ {speechError}</span>
+              <button
+                onClick={() => setSpeechError('')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#721c24',
+                  cursor: 'pointer',
+                  fontSize: '1rem'
+                }}
+              >
+                ✕
+              </button>
             </div>
           )}
 
