@@ -215,7 +215,7 @@ npm start
 1. Azure Speech サービスでProfessional Voiceを作成・デプロイ
 2. 環境変数でカスタムボイスを設定：
 ```env
-AVAILABLE_CUSTOM_VOICES=YourCustomVoice-MultiLingual-Fast,ja-JP-NanamiNeural
+AVAILABLE_CUSTOM_VOICES=YourCustomVoice-MultiLingual,ja-JP-NanamiNeural
 CUSTOM_VOICE_DEPLOYMENT_IDS={"YourCustomVoice-MultiLingual-Fast": "your-deployment-id"}
 ```
 3. UIでカスタムボイスを選択して使用
@@ -340,16 +340,16 @@ DEFAULT_AVATAR_STYLE=your-style
 ```json
 {
   "voice": {
-    "defaultName": "Inoue-MultiLingual-Fast",
+    "defaultName": "Chiba-MultiLingual",
     "defaultLanguage": "ja-JP"
   },
   "avatar": {
-    "defaultCharacter": "Inoue", 
+    "defaultCharacter": "Chiba", 
     "defaultStyle": "ja-normal",
     "defaultVideoFormat": "mp4"
   },
   "availableCustomVoices": [
-    "Inoue-MultiLingual-Fast",
+    "Chiba-MultiLingual",
     "ja-JP-NanamiNeural", 
     "en-US-AriaNeural"
   ],
