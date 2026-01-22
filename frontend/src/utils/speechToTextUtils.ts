@@ -36,23 +36,6 @@ export class WebSpeechRecognizer {
     this.setupRecognition();
   }
 
-  /**
-   * エラーコードを人間が読める形に変換
-   */
-  private getErrorMessage(error: string): string {
-    const errorMap: { [key: string]: string } = {
-      'no-speech': '音声が検出されませんでした。マイクが正しく接続されているか確認してください。',
-      'audio-capture': 'マイクが見つかりません。マイク接続を確認してください。',
-      'not-allowed': 'マイクへのアクセスが拒否されました。ブラウザの設定を確認してください。',
-      'network': 'ネットワーク接続エラー。インターネット接続を確認してください。',
-      'aborted': '音声認識がキャンセルされました。',
-      'service-not-available': '音声認識サービスが利用できません。',
-      'bad-grammar': '音声認識文法エラーが発生しました。',
-      'unknown': '不明なエラーが発生しました。'
-    };
-    return errorMap[error] || errorMap['unknown'];
-  }
-
   private setupRecognition() {
     if (!this.recognition) return;
 
