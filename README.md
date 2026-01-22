@@ -7,7 +7,7 @@ Azure AI Speech サービスのカスタムボイスとカスタムアバター�
 
 - 🎭 **リアルタイムアバター表示**: Azure Speech サービスを使用したリアルタイムアバター表示
 - 🎤 **カスタムボイス対応**: Azure Speech サービスのカスタムボイス（Professional Voice）に完全対応
-- 👤 **カスタムアバター対応**: カスタムアバターキャラクターの利用が可能  
+- 👤 **カスタムアバター対応**: カスタムアバターキャラクターの利用が可能
 - 🔗 **カスタムアバター + カスタムボイス**: カスタムアバターとカスタムボイスの組み合わせをサポート
 - ⚙️ **動的設定変更**: UIから音声・アバター設定をリアルタイムで変更
 - 🌐 **環境変数対応**: プロダクション環境での柔軟な設定管理
@@ -57,7 +57,6 @@ python-react-realtime-avater-sample/
   - RAG インデックスの読み込み・検索
   - 生成AIによる応答生成
   - カスタムボイス・アバター合成
-  
 - **scripts/**: バッチ処理
   - ドキュメント処理・アップロード
   - Azure AI Search インデックス作成
@@ -147,19 +146,23 @@ AVAILABLE_CUSTOM_VOICES=Inoue-MultiLingual-Fast,ja-JP-NanamiNeural,en-US-AriaNeu
 # リアルタイム合成でendpointIdとして使用
 CUSTOM_VOICE_DEPLOYMENT_IDS={"Inoue-MultiLingual-Fast": "your-deployment-id"}
 ```
+
 DEFAULT_AVATAR_STYLE=casual-sitting
 DEFAULT_VIDEO_FORMAT=mp4
 
 # カスタムアバター設定 (高度な設定)
+
 CUSTOM_AVATAR_ENABLED=false
 CUSTOM_AVATAR_CHARACTER=
 CUSTOM_AVATAR_STYLE=
 
 # カスタムボイス設定 (高度な設定)
+
 CUSTOM_VOICE_ENABLED=false
 CUSTOM_VOICE_NAME=
 CUSTOM_VOICE_DEPLOYMENT_ID=
-```
+
+````
 
 ## 💻 実行方法
 
@@ -168,7 +171,7 @@ CUSTOM_VOICE_DEPLOYMENT_ID=
 ```bash
 cd backend
 python main.py
-```
+````
 
 サーバーは http://localhost:8000 で起動します。
 
@@ -207,37 +210,46 @@ npm start
 ### カスタムボイス・アバターの使用方法
 
 #### 🎯 重要なポイント
+
 このアプリケーションは **リアルタイム合成** に対応しており、Azure Speech Service公式ドキュメントに基づいて実装されています。
 
 #### カスタムボイスの設定
 
 **Professional Voice の場合:**
+
 1. Azure Speech サービスでProfessional Voiceを作成・デプロイ
 2. 環境変数でカスタムボイスを設定：
+
 ```env
 AVAILABLE_CUSTOM_VOICES=YourCustomVoice-MultiLingual,ja-JP-NanamiNeural
 CUSTOM_VOICE_DEPLOYMENT_IDS={"YourCustomVoice-MultiLingual-Fast": "your-deployment-id"}
 ```
+
 3. UIでカスタムボイスを選択して使用
 
 **Voice Sync for Avatar の場合:**
+
 - カスタムアバター作成時に同時にトレーニングされる音声
 - 対象アバター専用で、独立使用は不可
 - アプリケーションが自動的に適切な設定を適用
 
 #### カスタムアバターの設定
+
 1. Azure Speech サービスでカスタムアバターを作成・デプロイ
 2. 環境変数でカスタムアバターを設定：
+
 ```env
 CUSTOM_AVATAR_ENABLED=true
 DEFAULT_AVATAR_CHARACTER=YourCustomAvatar
 DEFAULT_AVATAR_STYLE=your-style
 ```
+
 3. カスタムボイスとの組み合わせが可能
 
 #### 🔧 技術的な実装詳細
 
 **リアルタイム合成での重要な設定:**
+
 - **SpeechConfig.endpointId**: カスタムボイス使用時にデプロイメントIDを設定
 - **AvatarConfig.useBuiltInVoice**: カスタムアバター使用時の音声制御
   - `true`: Voice Sync for Avatar使用
@@ -247,6 +259,7 @@ DEFAULT_AVATAR_STYLE=your-style
 ## 🏗️ 技術スタック
 
 ### バックエンド
+
 - **FastAPI**: 高性能なPython Webフレームワーク
 - **Azure AI Speech SDK**: 音声認証トークンの取得とICEサーバー情報取得
 - **CORS対応**: フロントエンドとの安全な通信
@@ -254,6 +267,7 @@ DEFAULT_AVATAR_STYLE=your-style
 - **JSON設定管理**: カスタムボイスデプロイメントIDの動的管理
 
 ### フロントエンド
+
 - **React 18 + TypeScript**: 型安全なユーザーインターフェース
 - **Microsoft Cognitive Services Speech SDK**: リアルタイム音声合成とアバター表示
 - **WebRTC**: P2Pリアルタイム通信
@@ -265,9 +279,10 @@ DEFAULT_AVATAR_STYLE=your-style
 ## 📝 機能一覧
 
 ### ✅ 実装済み機能
+
 - **認証・接続**
   - Azure Speech サービス認証
-  - WebRTCによるP2P接続  
+  - WebRTCによるP2P接続
   - ICEサーバー最適化
   - 自動再接続機能
 
@@ -278,7 +293,7 @@ DEFAULT_AVATAR_STYLE=your-style
   - アバタースタイル変更
   - **カスタムアバター + カスタムボイス組み合わせ**
 
-- **音声機能**  
+- **音声機能**
   - テキスト音声合成
   - 標準音声（日本語、英語等）
   - **Professional Voice 完全対応**
@@ -304,6 +319,7 @@ DEFAULT_AVATAR_STYLE=your-style
   - 接続状態表示
 
 ### 🚧 今後の拡張可能性
+
 - バッチ音声合成機能
 - 多言語同時対応
 - アバター感情表現
@@ -312,18 +328,21 @@ DEFAULT_AVATAR_STYLE=your-style
 ## ⚠️ 注意事項・制限事項
 
 ### 技術的制限
+
 - **ブラウザ対応**: Chrome、Microsoft Edge、Firefox の最新版を推奨
 - **WebRTC制限**: 企業ファイアウォール環境では接続できない場合があります
 - **アイドルタイムアウト**: アバター接続は5分間のアイドル制限があります
 - **同時接続数**: 開発環境では同時接続数に制限があります
 
 ### カスタムボイス・アバターの制限
+
 - **Professional Voice**: リアルタイム合成で完全対応（endpointId設定済み）
 - **Voice Sync for Avatar**: カスタムアバター専用音声として自動適用
 - **リージョン制限**: カスタムリソースは特定のリージョンでのみ利用可能
 - **デプロイメントID**: 環境変数での正確な設定が必要
 
 ### 本番環境での考慮事項
+
 - **ICEサーバー**: 本番環境では専用TURNサーバーを推奨
 - **認証強化**: より厳密な認証機構の実装を推奨
 - **スケーリング**: Load Balancer と複数インスタンス対応
@@ -334,9 +353,11 @@ DEFAULT_AVATAR_STYLE=your-style
 ### バックエンド API エンドポイント
 
 #### `GET /api/config`
+
 アプリケーション設定を取得
 
 **レスポンス例:**
+
 ```json
 {
   "voice": {
@@ -344,13 +365,13 @@ DEFAULT_AVATAR_STYLE=your-style
     "defaultLanguage": "ja-JP"
   },
   "avatar": {
-    "defaultCharacter": "Chiba", 
+    "defaultCharacter": "Chiba",
     "defaultStyle": "ja-normal",
     "defaultVideoFormat": "mp4"
   },
   "availableCustomVoices": [
     "Chiba-MultiLingual",
-    "ja-JP-NanamiNeural", 
+    "ja-JP-NanamiNeural",
     "en-US-AriaNeural"
   ],
   "customVoiceDeploymentIds": {
@@ -364,9 +385,11 @@ DEFAULT_AVATAR_STYLE=your-style
 ```
 
 #### `GET /api/get-speech-token`
+
 Azure Speech サービス認証トークンを取得
 
 **レスポンス例:**
+
 ```json
 {
   "authToken": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
@@ -374,10 +397,12 @@ Azure Speech サービス認証トークンを取得
 }
 ```
 
-#### `GET /api/get-ice-server-info`  
+#### `GET /api/get-ice-server-info`
+
 WebRTC用ICEサーバー情報を取得
 
 **レスポンス例:**
+
 ```json
 [
   {
@@ -403,43 +428,45 @@ DEFAULT_VOICE_NAME=ja-JP-NanamiNeural
 DEFAULT_AVATAR_CHARACTER=lisa
 
 # 英語アバター（男性）
-DEFAULT_VOICE_NAME=en-US-BrianNeural  
+DEFAULT_VOICE_NAME=en-US-BrianNeural
 DEFAULT_AVATAR_CHARACTER=tim
 DEFAULT_AVATAR_STYLE=formal-standing
 ```
 
 ### 利用可能な標準アバター
 
-| キャラクター | 説明 | 対応スタイル |
-|------------|------|------------|
-| `lisa` | アジア系女性 | `casual-sitting`, `formal-standing` |
-| `anna` | 西欧系女性 | `casual-sitting`, `business-standing` |
-| `tim` | 西欧系男性 | `formal-standing`, `casual-sitting` |
+| キャラクター | 説明         | 対応スタイル                          |
+| ------------ | ------------ | ------------------------------------- |
+| `lisa`       | アジア系女性 | `casual-sitting`, `formal-standing`   |
+| `anna`       | 西欧系女性   | `casual-sitting`, `business-standing` |
+| `tim`        | 西欧系男性   | `formal-standing`, `casual-sitting`   |
 
 ### 利用可能な標準音声（一例）
 
-| 言語 | 音声名 | 性別 |
-|------|--------|------|
-| 日本語 | `ja-JP-NanamiNeural` | 女性 |
-| 日本語 | `ja-JP-KeitaNeural` | 男性 |
-| 英語(US) | `en-US-AriaNeural` | 女性 |
-| 英語(US) | `en-US-BrianNeural` | 男性 |
+| 言語     | 音声名               | 性別 |
+| -------- | -------------------- | ---- |
+| 日本語   | `ja-JP-NanamiNeural` | 女性 |
+| 日本語   | `ja-JP-KeitaNeural`  | 男性 |
+| 英語(US) | `en-US-AriaNeural`   | 女性 |
+| 英語(US) | `en-US-BrianNeural`  | 男性 |
 
 ### コードでの詳細カスタマイズ
 
 高度なカスタマイズが必要な場合：
 
 #### アバター設定の変更
+
 ```typescript
 // frontend/src/components/AvatarPlayer.tsx
 const avatarConfig = new speechSdk.AvatarConfig(
-    "your-custom-character", 
-    "your-custom-style",
-    "mp4" // または "webm"
+  "your-custom-character",
+  "your-custom-style",
+  "mp4", // または "webm"
 );
 ```
 
 #### 音声設定の変更
+
 ```typescript
 // Speech Configの設定
 speechConfig.speechSynthesisLanguage = "ja-JP";
@@ -451,30 +478,36 @@ speechConfig.speechSynthesisVoiceName = "ja-JP-NanamiNeural";
 ### よくある問題と解決方法
 
 #### 1. アバターが表示されない
+
 - **原因**: ブラウザがWebRTCに対応していない
 - **解決方法**: Chrome、Edge、Firefox の最新版を使用
 
-#### 2. 音声が出ない  
+#### 2. 音声が出ない
+
 - **原因**: ブラウザの自動再生ポリシー
 - **解決方法**: ブラウザの設定で自動再生を許可
 
 #### 3. 接続が頻繁に切断される
+
 - **原因**: ネットワーク不安定またはICEサーバー問題
 - **解決方法**: 安定したネットワーク環境を使用
 
 #### 4. カスタムアバターが動作しない
+
 - **原因**: `customized: true` が設定されていない
 - **解決方法**: UIで「カスタムアバター使用」をチェック
 
 #### 5. バックエンドAPI エラー
+
 - **原因**: 環境変数が正しく設定されていない
 - **解決方法**: `.env`ファイルの設定を確認し、バックエンドを再起動
 
 ### デバッグ情報の確認
 
 アプリケーション下部のデバッグ情報パネルで詳細なログを確認できます：
+
 - 接続状態
-- エラーメッセージ  
+- エラーメッセージ
 - 設定値
 - 通信ログ
 
@@ -487,39 +520,44 @@ speechConfig.speechSynthesisVoiceName = "ja-JP-NanamiNeural";
 #### 重要な実装ポイント
 
 **1. SpeechConfig設定**
+
 ```typescript
-const speechConfig = speechSdk.SpeechConfig.fromAuthorizationToken(authToken, region);
+const speechConfig = speechSdk.SpeechConfig.fromAuthorizationToken(
+  authToken,
+  region,
+);
 speechConfig.speechSynthesisVoiceName = voiceName;
 
 // カスタムボイス使用時の重要な設定
 if (customVoiceEnabled && deploymentId) {
-    (speechConfig as any).endpointId = deploymentId;
+  (speechConfig as any).endpointId = deploymentId;
 }
 ```
 
 **2. AvatarConfig設定**
+
 ```typescript
 const avatarConfig = new speechSdk.AvatarConfig(character, style, videoFormat);
 
 if (customAvatarEnabled) {
-    (avatarConfig as any).customized = true;
-    
-    // カスタムアバター + カスタムボイスの制御
-    if (customVoiceEnabled) {
-        (avatarConfig as any).useBuiltInVoice = false; // 外部カスタムボイス使用
-    } else {
-        (avatarConfig as any).useBuiltInVoice = true;  // Voice Sync for Avatar使用
-    }
+  (avatarConfig as any).customized = true;
+
+  // カスタムアバター + カスタムボイスの制御
+  if (customVoiceEnabled) {
+    (avatarConfig as any).useBuiltInVoice = false; // 外部カスタムボイス使用
+  } else {
+    (avatarConfig as any).useBuiltInVoice = true; // Voice Sync for Avatar使用
+  }
 }
 ```
 
 #### Azure公式サンプルとの対応関係
 
-| Azure公式サンプル | 本実装 | 説明 |
-|---|---|---|
-| `endpointId` | `speechConfig.endpointId` | カスタムボイスのデプロイメントID |
-| `useBuiltInVoice` | `avatarConfig.useBuiltInVoice` | アバター内蔵音声の使用制御 |
-| `customized` | `avatarConfig.customized` | カスタムアバターフラグ |
+| Azure公式サンプル | 本実装                         | 説明                             |
+| ----------------- | ------------------------------ | -------------------------------- |
+| `endpointId`      | `speechConfig.endpointId`      | カスタムボイスのデプロイメントID |
+| `useBuiltInVoice` | `avatarConfig.useBuiltInVoice` | アバター内蔵音声の使用制御       |
+| `customized`      | `avatarConfig.customized`      | カスタムアバターフラグ           |
 
 ### 設定管理の仕組み
 
