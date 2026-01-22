@@ -1,4 +1,5 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { WebSpeechRecognizer, checkMicrophonePermission, isBrowserSupported } from '../utils/speechToTextUtils';
 
 interface Message {
   id: string;
@@ -23,8 +24,33 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [streamingResponse, setStreamingResponse] = useState('');
   const [lastAIResponse, setLastAIResponse] = useState<string>('');
   const [useRAG, setUseRAG] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [interimText, setInterimText] = useState('');
+  const [microphoneSupported, setMicrophoneSupported] = useState(false);
+  const [microphonePermission, setMicrophonePermission] = useState<boolean | null>(null);
   
   const abortControllerRef = useRef<AbortController | null>(null);
+  const speechRecognizerRef = useRef<WebSpeechRecognizer | null>(null);
+
+  // 初期化：Speech-to-Text サポート確認とマイク権限チェック
+  useEffect(() => {
+    const initializeSpeechToText = async () => {
+      const isSupported = isBrowserSupported();
+      setMicrophoneSupported(isSupported);
+
+      if (isSupported) {
+        try {
+          const hasPermission = await checkMicrophonePermission();
+          setMicrophonePermission(hasPermission);
+        } catch (error) {
+          console.error('[ChatInterface] マイク権限チェックエラー:', error);
+          setMicrophonePermission(false);
+        }
+      }
+    };
+
+    initializeSpeechToText();
+  }, []);
 
   const sendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return;
@@ -209,6 +235,66 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   };
 
+  const startListening = async () => {
+    if (!microphonePermission) {
+      alert('マイクへのアクセス権限がありません。ブラウザの設定を確認してください。');
+      return;
+    }
+
+    try {
+      setIsListening(true);
+      setInterimText('');
+
+      // Speech Recognizer を初期化
+      if (!speechRecognizerRef.current) {
+        speechRecognizerRef.current = new WebSpeechRecognizer();
+      }
+
+      const recognizer = speechRecognizerRef.current;
+
+      // リアルタイム中間テキスト更新のため、定期的にチェック
+      const updateInterval = setInterval(() => {
+        setInterimText(recognizer.getInterimTranscript());
+      }, 100);
+
+      // 音声認識開始
+      recognizer.start();
+
+      // マイクボタン長押し時の自動停止（15秒後）
+      setTimeout(() => {
+        if (isListening) {
+          stopListening();
+        }
+      }, 15000);
+
+      // クリーンアップ関数で interval をクリア
+      return () => clearInterval(updateInterval);
+    } catch (error) {
+      console.error('[ChatInterface] 音声認識開始エラー:', error);
+      setIsListening(false);
+      alert('音声認識の開始に失敗しました。');
+    }
+  };
+
+  const stopListening = async () => {
+    if (!speechRecognizerRef.current) return;
+
+    try {
+      const recognizer = speechRecognizerRef.current;
+      const finalText = await recognizer.stop();
+
+      // 認識結果をテキストボックスに設定
+      setInputMessage(finalText);
+      setInterimText('');
+      setIsListening(false);
+
+      console.log('[ChatInterface] 音声認識完了:', finalText);
+    } catch (error) {
+      console.error('[ChatInterface] 音声認識停止エラー:', error);
+      setIsListening(false);
+    }
+  };
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !isLoading) {
       sendMessage();
@@ -317,10 +403,24 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           flexDirection: 'column',
           gap: '0.5rem'
         }}>
+          {/* 音声入力中の表示 */}
+          {isListening && (
+            <div style={{
+              padding: '0.75rem',
+              backgroundColor: '#fff3cd',
+              border: '1px solid #ffc107',
+              borderRadius: '0.5rem',
+              fontSize: '0.9rem',
+              color: '#856404'
+            }}>
+              🎤 {interimText ? `認識中: ${interimText}` : '音声入力待機中...'}
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <input
               type="text"
-              value={inputMessage}
+              value={inputMessage || interimText}
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder={useRAG ? "RAG機能でドキュメントを検索して応答します..." : "メッセージを入力してください..."}
@@ -332,8 +432,35 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 fontSize: '1rem',
                 outline: 'none'
               }}
-              disabled={isLoading}
+              disabled={isLoading || isListening}
             />
+            
+            {/* 音声入力ボタン */}
+            {microphoneSupported && (
+              <button
+                onMouseDown={startListening}
+                onMouseUp={stopListening}
+                onTouchStart={startListening}
+                onTouchEnd={stopListening}
+                title="マイクボタンを長押しして音声入力"
+                style={{
+                  padding: '0.75rem',
+                  backgroundColor: isListening ? '#dc3545' : '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '0.5rem',
+                  cursor: 'pointer',
+                  fontSize: '1.2rem',
+                  minWidth: '50px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                🎤
+              </button>
+            )}
+            
             {isLoading ? (
               <button
                 onClick={stopGeneration}
@@ -351,14 +478,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             ) : (
               <button
                 onClick={sendMessage}
-                disabled={!inputMessage.trim()}
+                disabled={!inputMessage.trim() && !interimText.trim()}
                 style={{
                   padding: '0.75rem 1.5rem',
-                  backgroundColor: inputMessage.trim() ? '#007bff' : '#ccc',
+                  backgroundColor: (inputMessage.trim() || interimText.trim()) ? '#007bff' : '#ccc',
                   color: 'white',
                   border: 'none',
                   borderRadius: '0.5rem',
-                  cursor: inputMessage.trim() ? 'pointer' : 'not-allowed'
+                  cursor: (inputMessage.trim() || interimText.trim()) ? 'pointer' : 'not-allowed'
                 }}
               >
                 送信
