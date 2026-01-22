@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { WebSpeechRecognizer, checkMicrophonePermission, isBrowserSupported, checkSpeechToTextEnvironment } from '../utils/speechToTextUtils';
+import { AudioRecorder, AzureSpeechToTextClient, checkAudioEnvironment } from '../utils/azureSpeechToTextUtils';
 
 interface Message {
   id: string;
@@ -31,14 +31,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [speechError, setSpeechError] = useState<string>('');
   
   const abortControllerRef = useRef<AbortController | null>(null);
-  const speechRecognizerRef = useRef<WebSpeechRecognizer | null>(null);
+  const audioRecorderRef = useRef<AudioRecorder | null>(null);
+  const speechClientRef = useRef<AzureSpeechToTextClient | null>(null);
 
-  // 初期化：Speech-to-Text サポート確認とマイク権限チェック
+  // 初期化：Azure Speech-to-Text クライアント と マイク権限チェック
   useEffect(() => {
     const initializeSpeechToText = async () => {
-      // 環境チェック
-      const envCheck = checkSpeechToTextEnvironment();
-      console.log('[ChatInterface] Speech-to-Text 環境情報:', envCheck);
+      // オーディオ環境チェック
+      const envCheck = await checkAudioEnvironment();
+      console.log('[ChatInterface] オーディオ環境:', envCheck);
 
       if (!envCheck.isSupported) {
         setSpeechError(envCheck.message);
@@ -46,21 +47,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         return;
       }
 
-      if (!envCheck.isSecure) {
-        console.warn('[ChatInterface] Web Speech API セキュリティ警告:', envCheck.message);
+      setMicrophoneSupported(true);
+      setMicrophonePermission(envCheck.hasMicrophonePermission);
+
+      if (!envCheck.hasMicrophonePermission) {
+        setSpeechError(envCheck.message);
       }
 
-      setMicrophoneSupported(true);
-
-      try {
-        const hasPermission = await checkMicrophonePermission();
-        setMicrophonePermission(hasPermission);
-        if (!hasPermission) {
-          setSpeechError('マイクへのアクセス権限がありません。ブラウザの設定を確認してください。');
-        }
-      } catch (error) {
-        console.error('[ChatInterface] マイク権限チェックエラー:', error);
-        setMicrophonePermission(false);
+      // Azure Speech-to-Text クライアントを初期化
+      if (!speechClientRef.current) {
+        speechClientRef.current = new AzureSpeechToTextClient('http://localhost:8000');
+        const isHealthy = await speechClientRef.current.checkHealth();
+        console.log('[ChatInterface] Azure Speech Service ヘルスチェック:', isHealthy);
       }
     };
 
@@ -261,67 +259,62 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       setIsListening(true);
       setInterimText('');
 
-      // Speech Recognizer を初期化
-      if (!speechRecognizerRef.current) {
-        speechRecognizerRef.current = new WebSpeechRecognizer();
+      // AudioRecorder を初期化
+      if (!audioRecorderRef.current) {
+        audioRecorderRef.current = new AudioRecorder();
       }
 
-      const recognizer = speechRecognizerRef.current;
+      const recorder = audioRecorderRef.current;
 
-      // リアルタイム中間テキスト更新のため、定期的にチェック
-      const updateInterval = setInterval(() => {
-        setInterimText(recognizer.getInterimTranscript());
-      }, 100);
+      // 録音開始
+      await recorder.start();
+      console.log('[ChatInterface] 音声録音開始');
 
-      // エラーハンドラーをオーバーライド
-      const originalRecognition = (recognizer as any).recognition;
-      if (originalRecognition) {
-        originalRecognition.onerror = (event: any) => {
-          const errorMsg = recognizer.getErrorMessage(event.error);
-          setSpeechError(errorMsg);
-          console.error('[ChatInterface] Speech-to-Text エラー:', event.error, '-', errorMsg);
-          setIsListening(false);
-          clearInterval(updateInterval);
-        };
-      }
-
-      // 音声認識開始
-      recognizer.start();
-
-      // マイクボタン長押し時の自動停止（15秒後）
+      // 15秒後に自動停止
       setTimeout(() => {
         if (isListening) {
           stopListening();
         }
       }, 15000);
-
-      // クリーンアップ関数で interval をクリア
-      return () => clearInterval(updateInterval);
     } catch (error) {
-      console.error('[ChatInterface] 音声認識開始エラー:', error);
-      setSpeechError('音声認識の開始に失敗しました。ブラウザの設定を確認してください。');
+      console.error('[ChatInterface] 音声録音開始エラー:', error);
+      setSpeechError(error instanceof Error ? error.message : '音声録音の開始に失敗しました。');
       setIsListening(false);
     }
   };
 
   const stopListening = async () => {
-    if (!speechRecognizerRef.current) return;
+    if (!audioRecorderRef.current || !speechClientRef.current) return;
 
     try {
-      const recognizer = speechRecognizerRef.current;
-      const finalText = await recognizer.stop();
+      const recorder = audioRecorderRef.current;
+      const speechClient = speechClientRef.current;
 
-      // 認識結果をテキストボックスに設定
-      setInputMessage(finalText);
-      setInterimText('');
-      setIsListening(false);
-      setSpeechError('');
+      // 録音停止
+      const audioBlob = await recorder.stop();
+      setInterimText('処理中...');
 
-      console.log('[ChatInterface] 音声認識完了:', finalText);
+      // Azure Speech Service で認識
+      console.log('[ChatInterface] 音声認識処理中...');
+      const result = await speechClient.transcribe(audioBlob);
+
+      if (result.success) {
+        // 認識結果をテキストボックスに設定
+        setInputMessage(result.text);
+        setInterimText('');
+        setIsListening(false);
+        setSpeechError('');
+        console.log('[ChatInterface] 音声認識完了:', result.text);
+      } else {
+        setSpeechError(result.error || '音声認識に失敗しました。');
+        setInterimText('');
+        setIsListening(false);
+      }
     } catch (error) {
       console.error('[ChatInterface] 音声認識停止エラー:', error);
-      setSpeechError('音声認識の停止中にエラーが発生しました。');
+      setSpeechError('音声認識の処理中にエラーが発生しました。');
       setIsListening(false);
+      setInterimText('');
     }
   };
 

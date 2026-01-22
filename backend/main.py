@@ -14,6 +14,8 @@ load_dotenv()
 from routes.ai_routes import router as ai_router
 # Import Azure RAG routes (Blob Storage + AI Search with Managed Identity)
 from routes.azure_rag_routes import router as azure_rag_router
+# Import Speech-to-Text routes (Azure Speech Service)
+from routes.speech_to_text_routes import router as speech_router
 
 app = FastAPI(
     title="AI強化リアルタイムアバターAPI", 
@@ -38,6 +40,8 @@ logger = logging.getLogger(__name__)
 app.include_router(ai_router, prefix="/api")
 # Azure RAG routes registration (Blob Storage + AI Search with Managed Identity)
 app.include_router(azure_rag_router)
+# Speech-to-Text routes registration (Azure Speech Service)
+app.include_router(speech_router)
 
 # Azure configuration from environment (fallback for local development)
 KEY_VAULT_URL = os.getenv("KEY_VAULT_URL", "https://ai-avatar-staging-kv.vault.azure.net/")
