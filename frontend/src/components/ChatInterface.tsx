@@ -60,6 +60,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         const isHealthy = await speechClientRef.current.checkHealth();
         console.log('[ChatInterface] Azure Speech Service ヘルスチェック:', isHealthy);
       }
+
+      // AudioRecorder を事前初期化（初回クリック時の遅延を防ぐ）
+      if (!audioRecorderRef.current) {
+        audioRecorderRef.current = new AudioRecorder();
+        try {
+          await audioRecorderRef.current.initialize();
+          console.log('[ChatInterface] AudioRecorder 事前初期化完了');
+        } catch (error) {
+          console.error('[ChatInterface] AudioRecorder 初期化エラー:', error);
+          setSpeechError('マイクの初期化に失敗しました');
+        }
+      }
     };
 
     initializeSpeechToText();
@@ -259,14 +271,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       setIsListening(true);
       setInterimText('');
 
-      // AudioRecorder を初期化
+      // AudioRecorder が初期化されていない場合は初期化
       if (!audioRecorderRef.current) {
         audioRecorderRef.current = new AudioRecorder();
+        await audioRecorderRef.current.initialize();
+        console.log('[ChatInterface] AudioRecorder を即座に初期化');
       }
 
       const recorder = audioRecorderRef.current;
 
-      // 録音開始
+      // 録音開始（事前初期化済みのため即座に開始）
       await recorder.start();
       console.log('[ChatInterface] 音声録音開始');
 

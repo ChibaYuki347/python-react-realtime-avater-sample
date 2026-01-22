@@ -33,8 +33,12 @@ app.add_middleware(
 )
 
 # ログ設定
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
+logger.debug("Logging initialized at DEBUG level")
 
 # AI routes registration
 app.include_router(ai_router, prefix="/api")
